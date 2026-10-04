@@ -1,0 +1,481 @@
+<title>NovaAgent Platform Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f5f6fa; --surface:#ffffff; --ink:#0d1a33; --muted:#566079; --line:#dfe4ee;
+  --accent:#1e3a8a; --accent-soft:#e7ecf8; --amber:#b9790c; --amber-soft:#fbf1dc;
+  --ok:#0f7a5c; --warn:#a85d00; --crit:#b42318; --code:#eef1f7;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0b1120; --surface:#121a2c; --ink:#e6ebf5; --muted:#9aa6bf; --line:#253150;
+  --accent:#8fa8f0; --accent-soft:#1a2645; --amber:#f0b955; --amber-soft:#2b2312;
+  --ok:#4cc79c; --warn:#f0a050; --crit:#f08a80; --code:#18223a; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0b1120; --surface:#121a2c; --ink:#e6ebf5; --muted:#9aa6bf; --line:#253150;
+  --accent:#8fa8f0; --accent-soft:#1a2645; --amber:#f0b955; --amber-soft:#2b2312;
+  --ok:#4cc79c; --warn:#f0a050; --crit:#f08a80; --code:#18223a; color-scheme:dark;}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.65;padding-inline:20px;padding-block:0 64px}
+.wrap{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px}
+nav.toc{position:sticky;top:env(safe-area-inset-top,0px);align-self:start;padding-top:40px;font-size:13px}
+nav.toc b{display:block;text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--muted);margin-bottom:10px}
+nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:4px 0 4px 10px;border-left:2px solid var(--line)}
+nav.toc a:hover{color:var(--accent);border-left-color:var(--accent)}
+main{min-width:0;padding-top:40px}
+header.doc{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:8px}
+.eyebrow{font-family:var(--mono);font-size:12px;color:var(--amber);letter-spacing:.06em;text-transform:uppercase}
+h1{font-size:34px;line-height:1.2;margin:8px 0 10px;text-wrap:balance;letter-spacing:-.01em}
+h2{font-size:22px;margin:44px 0 10px;text-wrap:balance;padding-top:8px}
+h3{font-size:16px;margin:26px 0 6px}
+p,li{max-width:72ch}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:var(--muted)}
+.meta span b{color:var(--ink);font-weight:600}
+.pill{display:inline-block;font-family:var(--mono);font-size:11.5px;padding:2px 8px;border-radius:99px;background:var(--amber-soft);color:var(--amber);font-weight:500}
+.pill.ok{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.pill.acc{background:var(--accent-soft);color:var(--accent)}
+code,kbd{font-family:var(--mono);font-size:.88em;background:var(--code);padding:1px 5px;border-radius:4px}
+.lead{font-size:17px;color:var(--ink);max-width:70ch}
+.decisions{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:18px 0}
+.decision{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.decision h4{margin:0 0 4px;font-size:14px}
+.decision p{margin:0;font-size:13.5px;color:var(--muted)}
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0 8px;overflow-x:auto}
+.diagram figcaption{font-size:12.5px;color:var(--muted);margin-top:8px;font-family:var(--mono)}
+pre.mermaid{margin:0;background:transparent;font-family:var(--sans)}
+.tbl{overflow-x:auto;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;background:color-mix(in srgb,var(--accent-soft) 45%,var(--surface))}
+tr:last-child td{border-bottom:0}
+td code{white-space:nowrap}
+.num{font-variant-numeric:tabular-nums}
+.callout{border-left:3px solid var(--amber);background:var(--amber-soft);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0;max-width:72ch}
+.callout.risk{border-left-color:var(--crit);background:color-mix(in srgb,var(--crit) 9%,var(--surface))}
+pre.cli{background:#0d1626;color:#d7e0f2;font-family:var(--mono);font-size:13px;padding:14px 16px;border-radius:10px;overflow-x:auto;line-height:1.55}
+pre.cli .c{color:#7f8db0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:860px){.wrap{grid-template-columns:1fr;gap:0}nav.toc{display:none}h1{font-size:28px}}
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Fehrest">
+  <b>Fehrest</b>
+  <a href="#summary">Khoolase</a>
+  <a href="#goals">Ahdaf</a>
+  <a href="#principles">Osool</a>
+  <a href="#context">C4 · Context</a>
+  <a href="#containers">C4 · Containers</a>
+  <a href="#components">C4 · Control plane</a>
+  <a href="#deploy">Deployment</a>
+  <a href="#flows">Jaryan-ha</a>
+  <a href="#agent">Agent loop (AI)</a>
+  <a href="#llm">LLM gateway</a>
+  <a href="#security">Amniyat</a>
+  <a href="#observability">Monitoring</a>
+  <a href="#commercial">Tejari</a>
+  <a href="#cli">CLI</a>
+  <a href="#api">API v1</a>
+  <a href="#roadmap">Roadmap</a>
+  <a href="#adr">Tasmim-ha (ADR)</a>
+</nav>
+<main>
+<header class="doc">
+  <div class="eyebrow">NovaAgent · Architecture v1 · nova.isigpu.local</div>
+  <h1>NovaAgent Platform — memari-e system</h1>
+  <div class="meta">
+    <span><b>Vaziat:</b> <span class="pill">Draft v1</span></span>
+    <span><b>Tarikh:</b> 2026-10-04</span>
+    <span><b>Scope:</b> web + CLI, multi-user, cluster-e Dorj</span>
+    <span><b>Mabna:</b> OpenHands Agent Canvas 1.6.5 / agent-server 1.38.0</span>
+  </div>
+</header>
+
+<section id="summary">
+<h2>Khoolase</h2>
+<p class="lead">NovaAgent ye <b>coding agent-e Cursor-class</b> baraye sazman-e: developer dar browser ya terminal task migozare, ye agent dar workspace-e ekhtesasi-e khodesh code mikhoone, minevise, test mikone va natije ro neshoon mide. Hame-ye model-ha az <b>LLM gateway-e sazman (LiteLLM)</b> rad mishan, pas masraf, hazine va dastresi kontrol-shode va ghabel-e gozaresh-an.</p>
+<div class="decisions">
+  <div class="decision"><h4>Control plane / data plane</h4><p><code>nova-control</code> stateless-e: auth, workspace lifecycle, routing, metering. Kar-e agent dar pod-e har karbar.</p></div>
+  <div class="decision"><h4>Yek hoviat, hame ja</h4><p>Keycloak (OIDC). Web ba oauth2-proxy, CLI ba Device Authorization Grant (RFC 8628). Hich secret-i be browser nemirese.</p></div>
+  <div class="decision"><h4>Workspace-e har karbar</h4><p>Pod-e OpenHands agent-server + PVC, scale-to-zero vaghti bikar-e, cold-start zir-e 30s.</p></div>
+  <div class="decision"><h4>Model az gateway</h4><p>Virtual key-e joda baraye har karbar dar LiteLLM: budget, rate limit, model allowlist, trace.</p></div>
+  <div class="decision"><h4>Observability-e sare-be-sar</h4><p>Prometheus + Grafana, Tempo (OTel trace az ingress ta vLLM), Loki. SLO va alert az roz-e aval.</p></div>
+  <div class="decision"><h4>Tejari az aval</h4><p>Plan, quota va metering-e token/compute baraye har karbar va har tim (Unit), ghabel-e export baraye billing.</p></div>
+</div>
+</section>
+
+<section id="goals">
+<h2>Ahdaf va gheyr-e ahdaf</h2>
+<div class="tbl"><table>
+<tr><th>Hadaf (v1)</th><th>Gheyr-e hadaf (alan)</th></tr>
+<tr><td>Web UI va CLI ba yek API-e moshtarak (<code>/v1</code>)</td><td>Sandbox-e sakht-gir (gVisor/Kata) — faz-e 4</td></tr>
+<tr><td>Login-e SSO ba hesab-e platform, bedoon-e key-e moshtarak</td><td>Thin client-e Electron va tunnel be laptop — ba'd az amn-sazi</td></tr>
+<tr><td>Workspace-e joda va ma'mool (persistent) baraye har karbar</td><td>Editor-e ekhtesasi (inline diff, tab completion) — faz-e 3</td></tr>
+<tr><td>Hame-ye LLM traffic az LiteLLM, ba key-e har karbar</td><td>Ejra-ye model-haye biruni (OpenAI/Anthropic) — faghat agar gateway ejaze bede</td></tr>
+<tr><td>Metrics, trace, log, SLO, dashboard</td><td>Billing-e vagheyi (faghat export-e masraf)</td></tr>
+</table></div>
+</section>
+
+<section id="principles">
+<h2>Osool-e mohandesi</h2>
+<ul>
+  <li><b>Separation of concerns:</b> control plane (tasmim-giri) az data plane (ejra-ye agent) joda-st; har kodoom mostaghel scale mishe.</li>
+  <li><b>Stateless control plane, declarative state:</b> vaziat-e workspace dar Kubernetes (label/annotation, baadan CRD) — <code>nova-control</code> mesl-e ye controller <i>reconcile</i> mikone. Restart-e control plane hich workspace-i ro az bein nemibare.</li>
+  <li><b>Zero trust dar marz:</b> har request hoviat-e moshakhas dare (OIDC); session key-e agent-server faghat dar control plane-e va be browser nemirese.</li>
+  <li><b>API-first:</b> web, CLI va baadan IDE extension hame mesl-e ham az <code>/v1</code> estefade mikonan; API versioned va backward-compatible.</li>
+  <li><b>12-factor:</b> config az env/Secret, log be stdout (JSON), process-haye disposable, image-haye immutable ba tag-e daghigh.</li>
+  <li><b>Least privilege:</b> ServiceAccount-e control plane faghat dar namespace-e workspace-ha ejaze dare; workspace hich dastresi be API-e Kubernetes nadare.</li>
+  <li><b>Observability by default:</b> RED metrics baraye har service, trace-e OTel ba trace context-e moshtarak az ingress ta model, log-e sakhtar-mand ba <code>user</code>/<code>workspace</code>/<code>conversation</code>.</li>
+  <li><b>AI engineering:</b> agent ba budget-e token va iteration, context condensation, human-in-the-loop baraye amaliyat-e khatarnak, va eval-e qabl az avaz kardan-e model.</li>
+</ul>
+</section>
+
+<section id="context">
+<h2>C4 · Level 1 — System context</h2>
+<figure class="diagram">
+<pre class="mermaid">
+flowchart LR
+  dev["👤 Developer<br/>(browser)"]
+  cli["⌨️ Developer<br/>(nova CLI)"]
+  adm["🛡️ Platform admin"]
+  subgraph nova["NovaAgent Platform · nova.isigpu.local"]
+    sys["NovaAgent<br/>coding agents + workspaces"]
+  end
+  kc["Keycloak / Dex<br/>(identity, SSO)"]
+  gw["LiteLLM gateway<br/>(keys, budgets, routing)"]
+  models["vLLM / SGLang / llama.cpp<br/>(GPU models)"]
+  git["Git servers<br/>(GitHub, Gitea)"]
+  obs["Observability<br/>Prometheus · Tempo · Loki · Grafana"]
+  admin["Dorj admin panel<br/>(units, quotas, keys)"]
+  dev -->|HTTPS| sys
+  cli -->|HTTPS + Bearer JWT| sys
+  adm --> admin
+  sys -->|OIDC| kc
+  sys -->|OpenAI API| gw --> models
+  sys -->|git clone/push| git
+  sys -.->|metrics · traces · logs| obs
+  admin -->|plans · keys| gw
+</pre>
+<figcaption>NovaAgent dar marz-e sazman: hoviat az Keycloak, model az gateway, observability az stack-e mojood.</figcaption>
+</figure>
+</section>
+
+<section id="containers">
+<h2>C4 · Level 2 — Container-ha</h2>
+<figure class="diagram">
+<pre class="mermaid">
+flowchart TB
+  user["Browser / nova CLI"]
+  subgraph edge["Edge · namespace nova"]
+    ing["ingress-nginx<br/>TLS nova.isigpu.local"]
+    o2p["oauth2-proxy<br/>OIDC session + JWT bearer"]
+  end
+  subgraph cp["Control plane · namespace nova"]
+    ctl["nova-control (FastAPI)<br/>/v1 API · reverse proxy · reconciler"]
+    web["nova-web (static SPA)<br/>Agent Canvas build, white-label"]
+    pg[("PostgreSQL<br/>audit · usage · plans")]
+  end
+  subgraph dp["Data plane · namespace nova-ws"]
+    ws1["workspace: alice<br/>agent-server + PVC"]
+    ws2["workspace: bob<br/>agent-server + PVC"]
+  end
+  subgraph ai["AI plane · namespace vllm"]
+    lite["LiteLLM gateway"]
+    m["Model servers"]
+  end
+  kapi["Kubernetes API"]
+  user --> ing --> o2p --> ctl
+  ctl --> web
+  ctl -->|HTTP + WebSocket<br/>session key injected| ws1
+  ctl --> ws2
+  ctl -->|create / scale / delete| kapi
+  ctl -->|/key/generate, /spend| lite
+  ctl --> pg
+  ws1 -->|virtual key per user| lite
+  ws2 --> lite
+  lite --> m
+</pre>
+<figcaption>Hame-ye traffic-e karbar az yek dar (oauth2-proxy → nova-control) rad mishe; workspace-ha mostaghim az biroon dastras nistan.</figcaption>
+</figure>
+<div class="tbl"><table>
+<tr><th>Container</th><th>Mas'ooliat</th><th>Technology</th></tr>
+<tr><td><code>oauth2-proxy</code></td><td>Login-e web (cookie), ta'id-e JWT-e CLI, header-e <code>X-Auth-Request-Email</code></td><td>oauth2-proxy 7.x, Dex/Keycloak</td></tr>
+<tr><td><code>nova-control</code></td><td>API-e <code>/v1</code>, workspace lifecycle, proxy be agent-server (HTTP+WS), key-e LiteLLM, quota, audit, metrics</td><td>Python 3.12, FastAPI, kubernetes-client, OTel</td></tr>
+<tr><td><code>nova-web</code></td><td>UI (Agent Canvas, NovaAgent branding), telemetry khamoosh</td><td>React SPA, static</td></tr>
+<tr><td><code>workspace</code></td><td>Agent-e OpenHands, ejra-ye tool-ha (bash, file edit), conversation state</td><td>agent-server 1.38.0, PVC</td></tr>
+<tr><td><code>PostgreSQL</code></td><td>Audit log, snapshot-e masraf, plan-ha (faz-e 2)</td><td>Postgres 16</td></tr>
+</table></div>
+</section>
+
+<section id="components">
+<h2>C4 · Level 3 — Ajza-ye nova-control</h2>
+<figure class="diagram">
+<pre class="mermaid">
+flowchart LR
+  subgraph ctl["nova-control"]
+    authn["Identity<br/>(trusted header / JWT)"]
+    api["/v1 API<br/>me · workspace · usage · models"]
+    prox["Workspace proxy<br/>HTTP + WebSocket"]
+    rec["Workspace reconciler<br/>ensure · scale-to-zero · GC"]
+    keys["LLM key broker<br/>LiteLLM admin API"]
+    quota["Plan & quota policy"]
+    meter["Metering<br/>(usage events)"]
+    tel["Telemetry<br/>/metrics · OTel · JSON logs"]
+  end
+  authn --> api & prox
+  api --> rec & quota & meter
+  prox --> rec
+  rec --> keys
+  quota --> keys
+</pre>
+<figcaption>Har ajza ye mas'ooliat-e vahed dare; proxy hich tasmim-e siasi nemigire, faghat be reconciler migooyad «workspace-e in karbar amade bashe».</figcaption>
+</figure>
+</section>
+
+<section id="deploy">
+<h2>Deployment view</h2>
+<figure class="diagram">
+<pre class="mermaid">
+flowchart TB
+  dns["DNS: nova.isigpu.local → 172.16.50.202 (kube-vip)"]
+  subgraph k8s["Kubernetes cluster (Dorj)"]
+    direction TB
+    subgraph nsn["ns: nova"]
+      d1["Deployment oauth2-proxy ×2"]
+      d2["Deployment nova-control ×2 (HPA)"]
+      d3["Deployment nova-web ×2"]
+      d4["StatefulSet postgres ×1"]
+    end
+    subgraph nsw["ns: nova-ws (NetworkPolicy: egress → LiteLLM, Git, Nexus)"]
+      w["Deployment ws-&lt;user&gt; ×0..1<br/>Service · PVC 20Gi · Secret(session, llm key)"]
+    end
+    subgraph nsm["ns: monitoring / logging"]
+      mon["ServiceMonitor → Prometheus · Tempo · Loki · Grafana"]
+    end
+  end
+  dns --> d1
+</pre>
+<figcaption>Control plane HA (2 replica); workspace-ha 0 ya 1 replica (scale-to-zero baraye kahesh-e hazine-ye compute).</figcaption>
+</figure>
+</section>
+
+<section id="flows">
+<h2>Jaryan-haye asli</h2>
+<h3>1. Login-e web va avvalin request (cold start)</h3>
+<figure class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor U as Developer
+  participant O as oauth2-proxy
+  participant K as Keycloak/Dex
+  participant C as nova-control
+  participant A as Kubernetes API
+  participant W as workspace (agent-server)
+  participant L as LiteLLM
+  U->>O: GET nova.isigpu.local
+  O->>K: OIDC authorize (SSO)
+  K-->>O: code → tokens
+  O->>C: request + X-Auth-Request-Email
+  C->>C: identity → user slug, plan
+  alt workspace vojood nadare
+    C->>L: POST /key/generate (user, budget, models)
+    C->>A: create Secret + PVC + Deployment + Service
+  else scaled to zero
+    C->>A: scale replicas 0 → 1
+  end
+  C->>A: wait Ready (readiness /alive)
+  C-->>U: SPA (bedoon-e hich secret)
+  U->>C: /api/... ya WebSocket
+  C->>W: proxy + X-Session-API-Key
+</pre>
+</figure>
+<h3>2. CLI: login ba Device Authorization Grant va <code>nova run</code></h3>
+<figure class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor D as Developer (terminal)
+  participant N as nova CLI
+  participant K as Keycloak
+  participant C as nova-control
+  participant W as workspace
+  D->>N: nova login
+  N->>K: POST /device/auth (client nova-cli)
+  K-->>N: user_code + verification_uri
+  N-->>D: «browser ro baz kon, code: ABCD-EFGH»
+  D->>K: login + approve
+  loop poll
+    N->>K: POST /token (device_code)
+  end
+  K-->>N: access + refresh token (dar keyring)
+  D->>N: nova run "test-haye auth ro dorost kon"
+  N->>C: POST /v1/conversations (Bearer JWT)
+  C->>W: start conversation
+  W-->>C: event stream
+  C-->>N: WebSocket events (action, observation, message)
+  N-->>D: stream + diff + exit code
+</pre>
+</figure>
+</section>
+
+<section id="agent">
+<h2>Agent loop (AI engineering)</h2>
+<figure class="diagram">
+<pre class="mermaid">
+flowchart LR
+  task["Task + repo context<br/>(SOUL.md, skills, AGENTS.md)"]
+  plan["LLM: plan / next action"]
+  act["Tool call<br/>bash · file edit · search · git"]
+  obs["Observation<br/>output · diff · test result"]
+  cond["Context condenser<br/>(token budget)"]
+  hitl{"Risky action?<br/>(rm -rf, push, secrets)"}
+  done["Final answer + diff"]
+  task --> plan --> hitl
+  hitl -- na --> act
+  hitl -- bale --> ask["Confirm az karbar (HITL)"] --> act
+  act --> obs --> cond --> plan
+  plan -->|done / max iterations / budget| done
+</pre>
+<figcaption>Loop-e CodeAct-e OpenHands SDK; mahdudiat-ha: max iterations, token budget-e conversation, budget-e mahane-ye key dar gateway.</figcaption>
+</figure>
+<div class="tbl"><table>
+<tr><th>Control</th><th>Koja emal mishe</th><th>Pishfarz (v1)</th></tr>
+<tr><td>Max iterations har task</td><td>agent-server conversation settings</td><td class="num">100</td></tr>
+<tr><td>Context condensation</td><td>SDK condenser (LLM summarizing)</td><td>roshan, az 80% context</td></tr>
+<tr><td>Confirmation (HITL)</td><td>security analyzer + confirmation mode</td><td>baraye amaliyat-e high-risk</td></tr>
+<tr><td>Budget-e token</td><td>LiteLLM virtual key (<code>max_budget</code>, TPM/RPM)</td><td>bar asas-e plan</td></tr>
+<tr><td>Model allowlist</td><td>LiteLLM key <code>models</code></td><td>model-haye coding (qwen3, GLM)</td></tr>
+<tr><td>Eval qabl az avaz kardan-e model</td><td>suite-e task-haye sabet (SWE-style) dar CI</td><td>faz-e 2</td></tr>
+</table></div>
+</section>
+
+<section id="llm">
+<h2>Ettesal be LLM gateway</h2>
+<ul>
+  <li><b>Key-e har karbar:</b> <code>nova-control</code> moghe-e sakhtan-e workspace ba admin key az <code>POST /key/generate</code> ye virtual key ba <code>user_id</code>, <code>team_id</code> (Unit), <code>models</code>, <code>max_budget</code>, <code>tpm/rpm</code> misaze; key dar Secret-e workspace mimoone va hichvaght be browser ya CLI nemire.</li>
+  <li><b>Address:</b> workspace mostaghim be <code>http://litellm-internal.vllm.svc:4000/v1</code> vasl mishe (dakhel-e cluster, bedoon-e ingress).</li>
+  <li><b>Metadata:</b> har call <code>metadata.tags = [nova, user:&lt;id&gt;, ws:&lt;id&gt;, conv:&lt;id&gt;]</code> — gozaresh-e masraf be tafkik-e karbar/tim/conversation az khod-e LiteLLM.</li>
+  <li><b>Trace:</b> <code>traceparent</code> az nova-control ta agent-server va LiteLLM (ke az ghabl be Tempo vasl-e) va vLLM edame peyda mikone — yek trace az click ta GPU.</li>
+  <li><b>Quota:</b> hamoon rolling-quota-e mojood-e Dorj (Redis) va budget-e key; residan be had → khata-ye vazeh dar UI/CLI ba zaman-e reset.</li>
+</ul>
+</section>
+
+<section id="security">
+<h2>Model-e amniyati</h2>
+<div class="tbl"><table>
+<tr><th>Tahdid</th><th>Kontrol dar v1</th></tr>
+<tr><td>Dastresi bedoon-e login</td><td>Har route posht-e oauth2-proxy; nova-control header-e hoviat ro faghat az oauth2-proxy ghabool mikone (NetworkPolicy + shared secret)</td></tr>
+<tr><td>Karbar A be workspace-e karbar B</td><td>Routing faghat bar asas-e hoviat-e ta'id-shode; hich esm/cookie-e ghabel-e taghir-i workspace ro entekhab nemikone</td></tr>
+<tr><td>Neshat-e secret</td><td>Session key va LLM key faghat dar Secret-e Kubernetes; proxy header ro server-side ezafe mikone</td></tr>
+<tr><td>Agent kar-e khatarnak mikone</td><td>Pod non-root, bedoon-e ServiceAccount token, resource limits, NetworkPolicy egress allowlist, HITL baraye amaliyat-e high-risk, audit-e har command</td></tr>
+<tr><td>Masraf-e bish az had</td><td>Budget va rate limit dar gateway, quota-e workspace va CPU/RAM bar asas-e plan</td></tr>
+<tr><td>Prompt injection az repo/web</td><td>Browser tool khamoosh dar v1, egress mahdood, confirmation baraye push/delete</td></tr>
+</table></div>
+<div class="callout risk"><b>Risk-e pazirofte-shode:</b> dar v1 sandbox-e kernel-level nist (taghaza-ye shoma). Agent dar container-e khodesh shell dare. Joda-sazi az tarigh-e pod, non-root, NetworkPolicy va namespace-e joda-st. Faz-e 4: gVisor/Kata RuntimeClass.</div>
+</section>
+
+<section id="observability">
+<h2>Monitoring va observability</h2>
+<figure class="diagram">
+<pre class="mermaid">
+flowchart LR
+  subgraph src["Manabe'"]
+    c["nova-control<br/>/metrics · OTel spans · JSON logs"]
+    w["workspaces<br/>logs · kube-state metrics"]
+    l["LiteLLM<br/>tokens · latency · spend"]
+    v["vLLM/SGLang<br/>TTFT · ITL · GPU"]
+  end
+  p["Prometheus"]
+  t["Tempo"]
+  lk["Loki"]
+  g["Grafana: NovaAgent dashboard<br/>+ alert rules"]
+  c --> p & t & lk
+  w --> p & lk
+  l --> p & t
+  v --> p & t
+  p & t & lk --> g
+</pre>
+</figure>
+<div class="tbl"><table>
+<tr><th>SLI</th><th>SLO (v1)</th><th>Metric</th></tr>
+<tr><td>Dastres boodan-e API</td><td class="num">99.5% / 30 rooz</td><td><code>nova_http_requests_total{code!~"5.."}</code></td></tr>
+<tr><td>Cold start-e workspace</td><td class="num">p95 &lt; 30 s</td><td><code>nova_workspace_start_seconds</code></td></tr>
+<tr><td>Proxy overhead</td><td class="num">p95 &lt; 50 ms</td><td><code>nova_proxy_request_seconds</code></td></tr>
+<tr><td>Avvalin token-e agent</td><td class="num">p95 &lt; 4 s</td><td>LiteLLM / vLLM TTFT</td></tr>
+<tr><td>Khata-ye LLM</td><td class="num">&lt; 1%</td><td><code>litellm_proxy_failed_requests_metric</code></td></tr>
+</table></div>
+<p>Alert-ha: API 5xx bala, cold start-e kond, workspace-e CrashLoop, nazdik shodan be budget-e karbar (80%), gateway down. Har log ba <code>user</code>, <code>workspace</code>, <code>trace_id</code> — az dashboard mostaghim be trace va log mishe raft.</p>
+</section>
+
+<section id="commercial">
+<h2>Didgah-e tejari</h2>
+<div class="tbl"><table>
+<tr><th>Plan</th><th>Workspace</th><th>Compute</th><th>LLM / mah</th><th>Model-ha</th><th>Sayer</th></tr>
+<tr><td><span class="pill acc">Starter</span></td><td class="num">1</td><td class="num">2 vCPU · 4 GiB · 20 GiB</td><td class="num">5 M token</td><td>model-e kochik</td><td>web</td></tr>
+<tr><td><span class="pill acc">Pro</span></td><td class="num">1</td><td class="num">4 vCPU · 8 GiB · 50 GiB</td><td class="num">30 M token</td><td>hame-ye model-haye coding</td><td>web + CLI</td></tr>
+<tr><td><span class="pill acc">Team</span></td><td class="num">1 / ozv</td><td class="num">8 vCPU · 16 GiB · 100 GiB</td><td>pool-e tim</td><td>hame</td><td>automation, gozaresh-e tim</td></tr>
+<tr><td><span class="pill">Enterprise</span></td><td>dalkhah</td><td>GPU-e ekhtesasi</td><td>dalkhah</td><td>model-e ekhtesasi</td><td>SLA, audit export, SAML</td></tr>
+</table></div>
+<ul>
+  <li><b>Tenancy:</b> karbar → Unit (tim/sazman) dar admin panel-e mojood; plan roye Unit, override roye karbar.</li>
+  <li><b>Metering:</b> token (az LiteLLM spend), compute (saat-e workspace-e roshan × size), storage (GiB-mah). Export-e mahane (CSV/API) baraye billing ya showback.</li>
+  <li><b>Unit economics:</b> scale-to-zero hazine-ye compute-e karbar-haye bikar ro hazf mikone; model-haye kochik baraye kar-haye sade (routing dar gateway) hazine-ye token ro kam mikone.</li>
+  <li><b>Product analytics:</b> faghat dakheli (bedoon-e PostHog-e biruni): task-e movaffagh, zaman ta avvalin diff, nerkh-e ghabool-e taghirat.</li>
+</ul>
+</section>
+
+<section id="cli">
+<h2>CLI: <code>nova</code></h2>
+<pre class="cli"><span class="c"># nasb</span>
+pipx install nova-cli            <span class="c"># ya binary-e tak-file</span>
+nova login                       <span class="c"># Device flow, token dar keyring</span>
+nova whoami                      <span class="c"># karbar, plan, masraf-e in mah</span>
+nova run "test-haye auth ro dorost kon" --repo . --model qwen3
+nova chat                        <span class="c"># REPL-e interactive ba stream</span>
+nova conversations ls | show &lt;id&gt; | resume &lt;id&gt;
+nova ws status | start | stop    <span class="c"># workspace-e shoma</span>
+nova usage --month               <span class="c"># token · compute · hazine</span>
+nova models                      <span class="c"># model-haye mojaz baraye plan-e shoma</span></pre>
+<p>CLI hich key-e LLM ya session key nadare; faghat JWT-e karbar ro dare. Khoroji-e <code>--json</code> baraye script va CI, va exit code-e ma'nadar (0 movaffagh, 2 quota, 3 auth) baraye pipeline-ha.</p>
+</section>
+
+<section id="api">
+<h2>API v1 (control plane)</h2>
+<div class="tbl"><table>
+<tr><th>Endpoint</th><th>Kar</th></tr>
+<tr><td><code>GET /v1/me</code></td><td>Hoviat, plan, quota, masraf</td></tr>
+<tr><td><code>GET|POST|DELETE /v1/workspace</code></td><td>Vaziat / start / stop-e workspace-e karbar</td></tr>
+<tr><td><code>GET /v1/models</code></td><td>Model-haye mojaz (az gateway, filter-shode bar asas-e plan)</td></tr>
+<tr><td><code>GET /v1/usage</code></td><td>Masraf-e token, compute, storage</td></tr>
+<tr><td><code>/api/*</code>, <code>/sockets/*</code></td><td>Proxy-e shaffaf be agent-server-e khod-e karbar (API-e OpenHands)</td></tr>
+<tr><td><code>GET /healthz</code>, <code>/readyz</code>, <code>/metrics</code></td><td>Operational</td></tr>
+</table></div>
+</section>
+
+<section id="roadmap">
+<h2>Roadmap</h2>
+<div class="tbl"><table>
+<tr><th>Faz</th><th>Mohtava</th><th>Vaziat</th></tr>
+<tr><td>1 · MVP</td><td>nova-control, SSO, workspace-e har karbar, LiteLLM key, nova-web, CLI (login/run/chat), dashboard + alert, deploy roye nova.isigpu.local</td><td><span class="pill">dar hal-e ejra</span></td></tr>
+<tr><td>2 · Production</td><td>CRD + operator, Postgres-e audit/usage, plan-ha dar admin panel, eval suite, automations, backup-e PVC</td><td>barname</td></tr>
+<tr><td>3 · Cursor-class</td><td>VS Code extension roye <code>/v1</code>, inline diff/apply, code indexing (embedding az gateway), model-e tab completion</td><td>barname</td></tr>
+<tr><td>4 · Hardening</td><td>gVisor/Kata, policy engine (OPA) baraye tool-ha, thin client + tunnel-e amn, SOC2-style audit</td><td>barname</td></tr>
+</table></div>
+</section>
+
+<section id="adr">
+<h2>Tasmim-haye memari (ADR)</h2>
+<div class="tbl"><table>
+<tr><th>#</th><th>Tasmim</th><th>Dalil</th><th>Jaygozin-e rad-shode</th></tr>
+<tr><td class="num">001</td><td>Yek pod-e agent-server baraye har karbar</td><td>agent-server multi-tenant nist; joda-sazi-e state, secret va resource</td><td>Yek server-e moshtarak ba tenant-e cookie (NovaAgent-e feli)</td></tr>
+<tr><td class="num">002</td><td>Control plane-e Python/FastAPI</td><td>Ham-zaban ba admin-panel va SDK-e OpenHands; client-e Kubernetes-e baligh</td><td>Node (nova-ingress)</td></tr>
+<tr><td class="num">003</td><td>Auth dar oauth2-proxy, JWT-e CLI ba skip-jwt-bearer</td><td>Yek nogte-ye auth baraye web va CLI, alagoo-ye mojood-e platform</td><td>Auth-e dakhel-e har service</td></tr>
+<tr><td class="num">004</td><td>Key-e LiteLLM-e har karbar</td><td>Budget, rate limit va gozaresh-e daghigh; revoke-e mostaghel</td><td>Token-e moshtarak-e sherkat</td></tr>
+<tr><td class="num">005</td><td>Scale-to-zero ba reconciler</td><td>Kahesh-e hazine; state dar PVC mimoone</td><td>Pod-e hamishe roshan</td></tr>
+<tr><td class="num">006</td><td>Bedoon-e sandbox dar v1</td><td>Taghaza-ye product; joda-sazi ba pod/NetworkPolicy</td><td>gVisor az aval (faz-e 4)</td></tr>
+</table></div>
+</section>
+</main>
+</div>
