@@ -1,0 +1,14 @@
+{
+  "name": "nova-desktop-build",
+  "private": true,
+  "version": "0.2.0",
+  "scripts": {
+    "start": "electron app",
+    "dist:linux": "electron-builder --config electron-builder.config.js --linux deb AppImage",
+    "dist:win": "electron-builder --config electron-builder.config.js --win nsis"
+  },
+  "devDependencies": {
+    "electron": "42.3.3",
+    "electron-builder": "26.8.1"
+  }
+}

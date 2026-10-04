@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src 'self'">
+<title>NovaAgent</title>
+<style>
+  @font-face { font-family:'Vazirmatn'; src:url(vazirmatn-400.woff2) format('woff2'); font-weight:400; }
+  @font-face { font-family:'Vazirmatn'; src:url(vazirmatn-600.woff2) format('woff2'); font-weight:600; }
+  :root { --bg:#0b0e14; --s1:#121722; --line:#232a38; --fg:#eef1f6; --mut:#9aa6ba; --acc:#e0805f; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--bg); color:var(--fg);
+         font-family:'Vazirmatn','Segoe UI',Tahoma,system-ui,sans-serif; }
+  .card { width:min(520px, calc(100vw - 32px)); background:var(--s1); border:1px solid var(--line); border-radius:16px; padding:28px; }
+  h1 { margin:0 0 6px; font-size:20px; }
+  p { margin:0 0 18px; color:var(--mut); line-height:1.7; }
+  .detail { font:12px ui-monospace,monospace; color:var(--mut); direction:ltr; text-align:left; word-break:break-all; margin-bottom:18px; }
+  label { display:block; font-size:13px; color:var(--mut); margin-bottom:6px; }
+  input { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--fg);
+          font:14px ui-monospace,monospace; direction:ltr; }
+  .row { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  button { padding:10px 16px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--fg); font:inherit; cursor:pointer; }
+  button.primary { background:var(--acc); border-color:var(--acc); color:#1a0f0a; font-weight:600; }
+  .err { color:#ff8a8a; font-size:13px; min-height:1.2em; margin-top:10px; }
+</style>
+</head>
+<body>
+<main class="card">
+  <h1 id="title"></h1>
+  <p id="lead"></p>
+  <div class="detail" id="detail"></div>
+  <label for="server" id="lbl"></label>
+  <input id="server" spellcheck="false" autocomplete="off">
+  <div class="row">
+    <button class="primary" id="retry"></button>
+    <button id="save"></button>
+  </div>
+  <div class="err" id="err"></div>
+</main>
+<script>
+  const q = new URLSearchParams(location.search)
+  const FA = q.get('lang') === 'fa'
+  if (FA) { document.documentElement.lang = 'fa'; document.documentElement.dir = 'rtl' }
+  const T = FA
+    ? { title: 'اتصال به NovaAgent', lead: 'سرور در دسترس نیست. شبکه یا VPN را بررسی کنید، یا نشانی سرور را تغییر دهید.', lbl: 'نشانی سرور', retry: 'تلاش دوباره', save: 'ذخیره و اتصال' }
+    : { title: 'Connect to NovaAgent', lead: 'The server is not reachable. Check your network or VPN, or change the server address.', lbl: 'Server address', retry: 'Try again', save: 'Save and connect' }
+  for (const k of ['title', 'lead', 'lbl', 'retry', 'save']) document.getElementById(k).textContent = T[k]
+  const detail = q.get('detail') || ''
+  document.getElementById('detail').textContent = detail
+  if (!detail) document.getElementById('lead').textContent = FA ? 'نشانی سرور NovaAgent سازمان خود را وارد کنید.' : 'Enter your organisation\'s NovaAgent server address.'
+  const input = document.getElementById('server')
+  input.value = q.get('server') || ''
+  document.getElementById('retry').onclick = () => window.nova.retry()
+  document.getElementById('save').onclick = async () => {
+    try { await window.nova.setServer(input.value) } catch (e) { document.getElementById('err').textContent = String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '') }
+  }
+</script>
+</body>
+</html>
