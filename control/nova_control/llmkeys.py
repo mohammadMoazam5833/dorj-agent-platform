@@ -22,8 +22,8 @@ async def create_user_key(email: str, slug: str) -> str:
         "user_id": email,
         "key_alias": f"nova-{slug}",
         "models": list(settings.allowed_models),
+        # no "tags": LiteLLM OSS rejects them (Enterprise-only); user_id + alias + metadata attribute spend
         "metadata": {"product": "nova", "workspace": slug},
-        "tags": ["nova"],
     }
     if settings.monthly_budget_usd > 0:
         body["max_budget"] = settings.monthly_budget_usd
@@ -48,14 +48,21 @@ async def delete_user_key(slug: str) -> None:
     LLM_KEY_EVENTS.labels("deleted" if r.status_code < 300 else "delete_error").inc()
 
 
-async def user_spend(email: str) -> dict:
-    """Spend/usage for the user as LiteLLM reports it (USD + tokens)."""
+async def user_spend(slug: str) -> dict:
+    """Spend for the user's nova key, as LiteLLM reports it (USD). Keys are looked up by alias:
+    /key/generate with a user_id does not create a LiteLLM user, so /user/info would 404."""
     async with httpx.AsyncClient(timeout=20) as c:
-        r = await c.get(f"{settings.litellm_url}/user/info", params={"user_id": email}, headers=_headers())
+        r = await c.get(f"{settings.litellm_url}/key/list", headers=_headers(),
+                        params={"key_alias": f"nova-{slug}", "return_full_object": "true"})
     if r.status_code >= 300:
         return {"available": False}
-    info = r.json().get("user_info") or {}
-    return {"available": True, "spend_usd": info.get("spend", 0), "max_budget": info.get("max_budget")}
+    keys = [k for k in r.json().get("keys", []) if isinstance(k, dict)]
+    if not keys:
+        return {"available": True, "spend_usd": 0.0, "max_budget": None, "models": []}
+    k = keys[0]
+    return {"available": True, "spend_usd": round(float(k.get("spend") or 0), 6),
+            "max_budget": k.get("max_budget"), "budget_reset_at": k.get("budget_reset_at"),
+            "models": k.get("models") or []}
 
 
 async def models() -> list:

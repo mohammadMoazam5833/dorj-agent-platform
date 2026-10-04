@@ -118,16 +118,14 @@ def _deployment(ident: Identity) -> client.V1Deployment:
     env = [
         client.V1EnvVar(name="SESSION_API_KEY", value_from=client.V1EnvVarSource(
             secret_key_ref=client.V1SecretKeySelector(name=n, key="session-api-key"))),
-        client.V1EnvVar(name="NOVA_LLM_API_KEY", value_from=client.V1EnvVarSource(
-            secret_key_ref=client.V1SecretKeySelector(name=n, key="llm-api-key"))),
-        client.V1EnvVar(name="NOVA_LLM_BASE_URL", value=f"{settings.litellm_url}/v1"),
-        client.V1EnvVar(name="NOVA_USER_EMAIL", value=ident.email),
         client.V1EnvVar(name="HOME", value=HOME),
+        client.V1EnvVar(name="OPENHANDS_SUPPRESS_BANNER", value="1"),
     ]
     probe = client.V1Probe(http_get=client.V1HTTPGetAction(path="/alive", port=settings.agent_server_port),
                            period_seconds=5, failure_threshold=60)
     container = client.V1Container(
         name="agent-server", image=settings.agent_server_image, image_pull_policy="IfNotPresent",
+        working_dir=HOME,   # agent-server keeps conversations/settings under ./workspace -> on the PVC
         ports=[client.V1ContainerPort(container_port=settings.agent_server_port, name="http")],
         env=env, startup_probe=probe,
         readiness_probe=client.V1Probe(http_get=client.V1HTTPGetAction(path="/alive", port=settings.agent_server_port), period_seconds=10),
@@ -135,7 +133,9 @@ def _deployment(ident: Identity) -> client.V1Deployment:
             requests={"cpu": "250m", "memory": "1Gi"},
             limits={"cpu": settings.workspace_cpu, "memory": settings.workspace_memory}),
         volume_mounts=[client.V1VolumeMount(name="home", mount_path=HOME)],
+        # the image declares USER openhands by name; kubelet needs the numeric id to verify non-root
         security_context=client.V1SecurityContext(allow_privilege_escalation=False, run_as_non_root=True,
+                                                  run_as_user=10001, run_as_group=10001,
                                                   capabilities=client.V1Capabilities(drop=["ALL"])),
     )
     pod = client.V1PodSpec(
@@ -179,6 +179,13 @@ async def _create(ident: Identity) -> None:
     log.info("workspace created", extra={"user": ident.email, "workspace": n, "event": "created"})
 
 
+async def _apply_template(ident: Identity) -> None:
+    _, apps = _apis()
+    want = _deployment(ident)
+    body = {"spec": {"template": client.ApiClient().sanitize_for_serialization(want.spec.template)}}
+    await asyncio.to_thread(apps.patch_namespaced_deployment, name_for(ident.slug), settings.workspace_namespace, body)
+
+
 async def _scale(slug: str, replicas: int) -> None:
     _, apps = _apis()
     await asyncio.to_thread(apps.patch_namespaced_deployment_scale, name_for(slug), settings.workspace_namespace,
@@ -199,13 +206,18 @@ async def ensure_ready(ident: Identity) -> Workspace:
         if ws.state == "missing":
             kind = "create"
             await _create(ident)
-        elif ws.replicas == 0:
-            await _scale(ident.slug, 1)
-            WS_EVENTS.labels("woken").inc()
+        else:
+            # roll the user's workspace onto the current template (image, limits, security) whenever
+            # it is not ready - this is how existing workspaces pick up a nova-control upgrade
+            await _apply_template(ident)
+            if ws.replicas == 0:
+                await _scale(ident.slug, 1)
+                WS_EVENTS.labels("woken").inc()
         deadline = t0 + settings.start_timeout_s
         while time.monotonic() < deadline:
             ws = await asyncio.to_thread(get, ident)
             if ws.state == "ready":
+                await seed_llm_settings(ident)   # idempotent: no-op when already pointing at the gateway
                 WS_START.labels(kind).observe(time.monotonic() - t0)
                 return ws
             if ws.state == "error":
@@ -213,6 +225,28 @@ async def ensure_ready(ident: Identity) -> Workspace:
             await asyncio.sleep(1.5)
         WS_EVENTS.labels("start_failed").inc()
         return ws
+
+
+async def seed_llm_settings(ident: Identity, model: str | None = None) -> None:
+    """Point the new workspace's agent at the gateway with the user's own virtual key. The key is
+    stored server-side by agent-server (masked on read, encrypted for the UI)."""
+    import httpx
+    core, _ = _apis()
+    sec = await asyncio.to_thread(core.read_namespaced_secret, name_for(ident.slug), settings.workspace_namespace)
+    key = base64.b64decode(sec.data["llm-api-key"]).decode()
+    sess = base64.b64decode(sec.data["session-api-key"]).decode()
+    hdr = {"X-Session-API-Key": sess}
+    async with httpx.AsyncClient(timeout=30) as c:
+        cur = await c.get(f"{service_url(ident.slug)}/api/settings", headers=hdr)
+        llm = (cur.json().get("agent_settings") or {}).get("llm") or {} if cur.status_code < 300 else {}
+        if not model and llm.get("base_url") == settings.litellm_url and llm.get("api_key"):
+            return
+        body = {"agent_settings_diff": {"llm": {"model": f"litellm_proxy/{model or settings.default_model}",
+                                                "base_url": settings.litellm_url, "api_key": key}}}
+        r = await c.patch(f"{service_url(ident.slug)}/api/settings", json=body, headers=hdr)
+    if r.status_code >= 300:
+        log.error("seeding LLM settings failed", extra={"workspace": name_for(ident.slug), "event": "seed_failed"})
+        WS_EVENTS.labels("seed_failed").inc()
 
 
 async def stop(ident: Identity) -> None:

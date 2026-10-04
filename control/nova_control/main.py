@@ -57,7 +57,7 @@ async def _startup():
 @app.middleware("http")
 async def _red_metrics(request: Request, call_next):
     t0 = time.perf_counter()
-    route = "proxy" if request.url.path.startswith(("/api/", "/sockets/")) else (
+    route = "proxy" if request.url.path.startswith(("/api/", "/sockets/", "/server_info", "/health", "/alive", "/ready")) and request.url.path != "/readyz" else (
         request.url.path if request.url.path.startswith("/v1/") else "static")
     code = 500
     try:
@@ -67,6 +67,12 @@ async def _red_metrics(request: Request, call_next):
     finally:
         HTTP_REQUESTS.labels(route, request.method, str(code)).inc()
         HTTP_LATENCY.labels(route).observe(time.perf_counter() - t0)
+
+
+@app.exception_handler(llmkeys.LLMKeyError)
+async def _llm_key_error(request: Request, exc: llmkeys.LLMKeyError):
+    log.error("LLM gateway key error: %s", exc, extra={"event": "llm_key_error"})
+    return JSONResponse({"error": "LLM gateway rejected the workspace key request", "detail": str(exc)[:300]}, status_code=502)
 
 
 @app.get("/healthz")
@@ -114,7 +120,7 @@ async def models(ident: Identity = Depends(current_identity)):
 
 @app.get("/v1/usage")
 async def usage(ident: Identity = Depends(current_identity)):
-    return {"user": ident.email, "llm": await llmkeys.user_spend(ident.email)}
+    return {"user": ident.email, "llm": await llmkeys.user_spend(ident.slug)}
 
 
 # ── proxy to the caller's agent-server ───────────────────────────────────────
@@ -144,6 +150,17 @@ async def proxy_http(path: str, request: Request, ident: Identity = Depends(curr
     resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in HOP_BY_HOP}
     return StreamingResponse(upstream.aiter_raw(), status_code=upstream.status_code, headers=resp_headers,
                              background=BackgroundTask(upstream.aclose))
+
+
+# agent-server's root-level info/health endpoints the UI calls on its backend (version check etc.)
+@app.get("/server_info")
+@app.get("/health")
+@app.get("/alive")
+@app.get("/ready")
+async def proxy_root_info(request: Request, ident: Identity = Depends(current_identity)):
+    base, key = await _target(ident)
+    r = await _http.get(f"{base}{request.url.path}", headers={"X-Session-API-Key": key})
+    return Response(r.content, status_code=r.status_code, media_type=r.headers.get("content-type"))
 
 
 @app.websocket("/sockets/{path:path}")

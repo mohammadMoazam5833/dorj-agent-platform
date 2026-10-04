@@ -4,3 +4,7 @@ __pycache__/
 control/web/
 dist/
 *.egg-info/
+e2e/node_modules
+e2e/test-results/
+node_modules/
+e2e/*.png

@@ -20,3 +20,8 @@ def test_missing_identity_is_401(headers):
     with pytest.raises(HTTPException) as e:
         identity_from_headers(headers)
     assert e.value.status_code == 401
+
+
+def test_gateway_identity_header_wins_over_auth_proxy_header():
+    ident = identity_from_headers({"kubeflow-userid": "cli@isigpu.local", "x-auth-request-email": "x@isigpu.local"})
+    assert ident.email == "cli@isigpu.local"
