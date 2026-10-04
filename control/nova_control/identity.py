@@ -1,6 +1,7 @@
-"""Caller identity. nova-control is reachable only through the Istio ingress gateway (AuthorizationPolicy),
-which requires a valid Dex JWT on every request and writes the caller's email into kubeflow-userid.
-Nothing the client sends selects a workspace."""
+"""Caller identity. nova-control is reachable only from nova-auth (oauth2-proxy on Keycloak realm "nova",
+enforced by an Istio AuthorizationPolicy on the caller's mTLS principal). nova-auth authenticates every
+request (browser session cookie, or the CLI's bearer id_token checked against the realm JWKS), strips any
+client-sent X-Forwarded-* identity headers and writes the verified ones. Nothing else selects a workspace."""
 import re
 from dataclasses import dataclass
 
@@ -25,13 +26,10 @@ def slug_for(email: str) -> str:
 
 
 def identity_from_headers(headers) -> Identity:
-    # kubeflow-userid is written by the Istio gateway from the *verified* Dex JWT (RequestAuthentication
-    # outputClaimToHeaders), for browser sessions (oauth2-proxy forwards the token) and CLI bearer
-    # tokens alike, overwriting anything the client sent. X-Auth-Request-Email is the fallback.
-    email = (headers.get("kubeflow-userid") or headers.get("x-auth-request-email") or "").strip().lower()
+    email = (headers.get("x-forwarded-email") or "").strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=401, detail="not signed in")
-    groups = tuple(g for g in (headers.get("kubeflow-groups") or headers.get("x-auth-request-groups") or "").split(",") if g)
+    groups = tuple(g.strip() for g in (headers.get("x-forwarded-groups") or "").split(",") if g.strip())
     return Identity(email=email, slug=slug_for(email), groups=groups)
 
 

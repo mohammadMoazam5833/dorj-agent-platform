@@ -20,7 +20,7 @@ test('NovaAgent end to end: SSO, own workspace, seeded LLM key, real agent answe
   expect(email).toMatch(/@/)
 
   // forged identity / session headers must not change who we are
-  const forged = await api(page, '/v1/me', 'GET', null, { 'kubeflow-userid': 'someone-else@isigpu.local', 'X-Session-API-Key': 'x' })
+  const forged = await api(page, '/v1/me', 'GET', null, { 'X-Forwarded-Email': 'someone-else@isigpu.local', 'kubeflow-userid': 'someone-else@isigpu.local', 'X-Session-API-Key': 'x' })
   expect(forged.json.email).toBe(email)
 
   const ws = await api(page, '/v1/workspace', 'POST')

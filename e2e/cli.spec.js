@@ -9,7 +9,7 @@ import path from 'node:path'
 const CLI_DIR = path.resolve(__dirname, '../cli')
 const PY = process.env.NOVA_PY || 'python3'
 const cfg = mkdtempSync(path.join(tmpdir(), 'nova-cli-e2e-'))
-const env = { ...process.env, PYTHONPATH: CLI_DIR, PYTHONUNBUFFERED: '1', NOVA_CONFIG_DIR: cfg,
+const env = { ...process.env, PYTHONPATH: CLI_DIR, NOVA_ISSUER: process.env.NOVA_ISSUER || 'https://identity.isigpu.local/realms/nova', PYTHONUNBUFFERED: '1', NOVA_CONFIG_DIR: cfg,
   NOVA_RESOLVE: process.env.NOVA_RESOLVE || 'nova.isigpu.local=172.16.50.202' }
 for (const k of ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy', 'ALL_PROXY', 'all_proxy']) delete env[k]
 const nova = (...args) => spawnSync(PY, ['-m', 'nova_cli.main', ...args], { env, encoding: 'utf8', timeout: 600_000 })
@@ -29,7 +29,7 @@ test('nova CLI: device login, whoami, models, usage, run', async ({ page }) => {
   const url = out.match(/https:\/\/\S+\/device\S*/)[0]
 
   await page.goto(url)
-  if (await page.locator('input[name=user_code]').count()) await page.locator('button[type=submit], input[type=submit]').first().click()
+  if (await page.locator('input[name=device_user_code], input[name=user_code]').count()) await page.locator('button[type=submit], input[type=submit]').first().click()
   const pw = page.locator('input[type="password"]:visible').first()
   await pw.waitFor({ timeout: 30_000 })
   const form = page.locator('form', { has: pw })
@@ -37,8 +37,9 @@ test('nova CLI: device login, whoami, models, usage, run', async ({ page }) => {
   await pw.fill(process.env.E2E_PASS)
   await page.waitForFunction(u => { const h = document.getElementById('username'); return !h || h.type !== 'hidden' || h.value.startsWith(u.split('@')[0] + '@') }, process.env.E2E_USER)
   await pw.press('Enter')
-  const grant = page.locator('button:has-text("Grant Access")')
-  if (await grant.waitFor({ timeout: 8_000 }).then(() => true, () => false)) await grant.click()
+  // Keycloak's device-grant consent screen ("Do you grant these access privileges?")
+  const grant = page.locator('[name="accept"], #kc-login, button:has-text("Yes")').first()
+  if (await grant.waitFor({ timeout: 10_000 }).then(() => true, () => false)) await grant.click()
 
   expect(await done, out).toBe(0)
   expect(out).toMatch(/vared shodid be onvan-e \S+@/)

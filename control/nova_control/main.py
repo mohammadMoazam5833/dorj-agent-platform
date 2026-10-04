@@ -39,7 +39,9 @@ setup_tracing(app)
 BROWSER_PLACEHOLDER_KEY = "nova-proxied"
 HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers",
               "transfer-encoding", "upgrade", "host", "content-length"}
-STRIP_REQUEST = HOP_BY_HOP | {"x-session-api-key", "authorization", "cookie", "kubeflow-userid", "kubeflow-groups"}
+STRIP_REQUEST = HOP_BY_HOP | {"x-session-api-key", "authorization", "cookie", "kubeflow-userid", "kubeflow-groups",
+                                  "x-forwarded-email", "x-forwarded-user", "x-forwarded-groups",
+                                  "x-forwarded-preferred-username", "x-forwarded-access-token"}
 
 _sockets: collections.Counter = collections.Counter()
 _http: httpx.AsyncClient | None = None

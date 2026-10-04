@@ -10,18 +10,15 @@ def test_slug_is_dns_safe_and_stable():
     assert slug_for("x" * 80 + "@y.z") == "x" * 40
 
 
-def test_identity_comes_only_from_auth_proxy_headers():
-    ident = identity_from_headers({"x-auth-request-email": "Bob@isigpu.local", "x-auth-request-groups": "a,b"})
+def test_identity_comes_only_from_nova_auth_headers():
+    ident = identity_from_headers({"x-forwarded-email": "Bob@isigpu.local", "x-forwarded-groups": "a, b"})
     assert ident.email == "bob@isigpu.local" and ident.slug == "bob" and ident.groups == ("a", "b")
 
 
-@pytest.mark.parametrize("headers", [{}, {"x-auth-request-email": "not-an-email"}, {"x-session-api-key": "x"}])
+@pytest.mark.parametrize("headers", [{}, {"x-forwarded-email": "not-an-email"}, {"x-session-api-key": "x"},
+                                     # headers of the Dorj platform's auth chain carry no identity here
+                                     {"kubeflow-userid": "x@isigpu.local"}, {"x-auth-request-email": "x@isigpu.local"}])
 def test_missing_identity_is_401(headers):
     with pytest.raises(HTTPException) as e:
         identity_from_headers(headers)
     assert e.value.status_code == 401
-
-
-def test_gateway_identity_header_wins_over_auth_proxy_header():
-    ident = identity_from_headers({"kubeflow-userid": "cli@isigpu.local", "x-auth-request-email": "x@isigpu.local"})
-    assert ident.email == "cli@isigpu.local"

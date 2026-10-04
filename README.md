@@ -1,6 +1,6 @@
 # NovaAgent platform
 
-Multi-user, Cursor-class coding agents on the Dorj cluster: **https://nova.isigpu.local** (web) and the
+Multi-user, Cursor-class coding agents (a standalone product, separate from Dorj): **https://nova.isigpu.local** (web) and the
 **`nova`** CLI. Architecture with C4/sequence/agent-loop diagrams: [`docs/architecture.html`](docs/architecture.html).
 
 | Part | Path | What it is |

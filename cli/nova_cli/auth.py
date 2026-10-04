@@ -1,4 +1,4 @@
-"""OAuth 2.0 Device Authorization Grant (RFC 8628) against Dex, plus token refresh.
+"""OAuth 2.0 Device Authorization Grant (RFC 8628) against NovaAgent's own Keycloak realm, plus token refresh.
 Tokens are stored in ~/.config/nova/credentials.json with mode 0600."""
 import json
 import os
@@ -11,7 +11,7 @@ import httpx
 CONFIG_DIR = Path(os.environ.get("NOVA_CONFIG_DIR", Path.home() / ".config" / "nova"))
 CRED_FILE = CONFIG_DIR / "credentials.json"
 DEFAULT_SERVER = os.environ.get("NOVA_SERVER", "https://nova.isigpu.local")
-DEFAULT_ISSUER = os.environ.get("NOVA_ISSUER", "https://platform.isigpu.local/dex")
+DEFAULT_ISSUER = os.environ.get("NOVA_ISSUER", "https://identity.isigpu.local/realms/nova")
 CLIENT_ID = os.environ.get("NOVA_CLIENT_ID", "nova-cli")
 GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 
@@ -41,6 +41,16 @@ def load() -> dict:
 
 
 def logout() -> None:
+    creds = load()
+    # revoke the (offline) refresh token at the realm too, so a copied credentials file stops working
+    if creds.get("refresh_token") and creds.get("issuer"):
+        try:
+            ep = _discovery(creds["issuer"]).get("revocation_endpoint")
+            if ep:
+                httpx.post(ep, data={"token": creds["refresh_token"], "token_type_hint": "refresh_token",
+                                     "client_id": CLIENT_ID}, verify=_verify(), timeout=15)
+        except (httpx.HTTPError, AuthError, ValueError):
+            pass
     try:
         CRED_FILE.unlink()
     except FileNotFoundError:
@@ -56,7 +66,7 @@ def _discovery(issuer: str) -> dict:
 def device_login(server: str = DEFAULT_SERVER, issuer: str = DEFAULT_ISSUER, out=print) -> dict:
     disc = _discovery(issuer)
     dev_ep = disc.get("device_authorization_endpoint") or f"{issuer}/device/code"
-    r = httpx.post(dev_ep, data={"client_id": CLIENT_ID, "scope": "openid email profile groups offline_access"},
+    r = httpx.post(dev_ep, data={"client_id": CLIENT_ID, "scope": "openid email profile offline_access"},
                    verify=_verify(), timeout=15)
     if r.status_code >= 300:
         raise AuthError(f"device authorization failed: {r.status_code} {r.text[:200]}")
