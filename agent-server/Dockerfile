@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir ${PIP_INDEX_URL:+--index-url "$PIP_INDEX_URL"} ${
       "openhands-tools==${AGENT_SERVER_VERSION}" "agent-client-protocol<0.11" "fastmcp>=3,<4"
 COPY sidecar_bridge /opt/nova/tools/sidecar_bridge
 COPY nova_server_patches /opt/nova/tools/nova_server_patches
+# NovaAgent's agent identity (NovaAgent scripts/deploy/SOUL.md, staged by k8s-deploy script 140)
+COPY SOUL.md /opt/nova/SOUL.md
 RUN useradd -m -u 10001 -s /bin/bash openhands
 ENV PYTHONPATH=/opt/nova/tools PYTHONUNBUFFERED=1 LITELLM_LOCAL_MODEL_COST_MAP=True
 USER 10001

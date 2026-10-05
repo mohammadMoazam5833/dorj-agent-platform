@@ -24,6 +24,10 @@ scripts/patches/conversation_{router,service}-custhome.patch did by editing site
 4. The NovaAgent UI's company-managed LLM profile points at the public ``https://<host>/llmapi``
    (what the customer's app can reach). Inside the cluster the same calls go straight to the
    internal LiteLLM (NOVA_LLM_PUBLIC_BASE -> NOVA_LLM_INTERNAL_BASE), same per-user key.
+7. Identity: the agent is NovaAgent, not "OpenHands agent". NovaAgent's own identity file
+   (scripts/deploy/SOUL.md, baked at /opt/nova/SOUL.md - ~/.openhands is the user's PVC) is the
+   SOUL, and the self-documentation block (which pointed at OpenHands docs/products) describes
+   NovaAgent instead.
 6. The agent is told which machine it really works on: the customer's sidecar hello (NovaAgent
    client overlay) reports OS, home, shell and installed runtimes; it is appended to the agent's
    system prompt (<USER_MACHINE>) for every new conversation.
@@ -156,6 +160,34 @@ def internal_llm_base(base: str | None) -> str | None:
     return base
 
 
+NOVA_SOUL = ("You are NovaAgent, an intelligent AI assistant for coding and system tasks, made by NovaAgent. "
+             "Always present yourself with the exact name \"NovaAgent\" in Latin script.")
+NOVA_SELF_DOC = """<SELF_DOCUMENTATION>
+When the user asks who you are, what you can do, or how to use this product: you are NovaAgent.
+Answer from what you know about NovaAgent and do not refer to any other product, vendor, framework
+or website, and never mention internal component names. NovaAgent:
+- runs in the NovaAgent desktop app (Windows, Linux) and works directly on the user's own computer:
+  their folders, files, terminal and installed tools (see <USER_MACHINE> when present);
+- plans, writes and edits code across many files, runs builds and tests and fixes until they pass,
+  uses git (commits, branches, review-ready changes), and keeps a task list for longer work;
+- uses the organisation's own AI models (selectable in the app), with no keys or setup for the user.
+</SELF_DOCUMENTATION>"""
+
+
+def _install_identity() -> None:
+    import os as _os
+
+    from openhands.sdk.agent import base as agent_base
+    from openhands.sdk.context.prompts.sections import static as prompt_static
+
+    soul_path = _os.environ.get("NOVA_SOUL_PATH", "/opt/nova/SOUL.md")
+    if _os.path.isfile(soul_path):
+        agent_base._SOUL_PATH = soul_path            # read by _load_soul_md() on every prompt build
+    agent_base._DEFAULT_SOUL = NOVA_SOUL
+    prompt_static.SoulSection._DEFAULT_SOUL = NOVA_SOUL
+    prompt_static.SelfDocumentationSection.body = NOVA_SELF_DOC
+
+
 def _install() -> None:
     from openhands.agent_server import conversation_service as cs
 
@@ -273,6 +305,8 @@ def _install() -> None:
             continue
         if not isinstance(getattr(mod, "os", None), _OsShim):
             mod.os = _OsShim("os")
+
+    _install_identity()
 
     from openhands.sdk.llm import llm as llm_mod
 
