@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import sys
@@ -25,17 +26,7 @@ EXIT_OK, EXIT_ERR, EXIT_QUOTA, EXIT_AUTH = 0, 1, 2, 3
 class Api:
     def __init__(self):
         self.server, token = auth.bearer()
-        base, headers, self.ext = self.server, {"Authorization": f"Bearer {token}"}, {}
-        # NOVA_RESOLVE="nova.isigpu.local=172.16.50.202": like curl --resolve, for hosts not yet in DNS;
-        # TLS is still verified against the real host name (SNI)
-        host = httpx.URL(self.server).host
-        for pair in filter(None, os.environ.get("NOVA_RESOLVE", "").split(",")):
-            name, _, ip = pair.partition("=")
-            if name.strip() == host and ip.strip():
-                base = str(httpx.URL(self.server).copy_with(host=ip.strip()))
-                headers["Host"] = host
-                self.ext = {"sni_hostname": host}
-        self.c = httpx.Client(base_url=base, headers=headers, verify=auth._verify(), timeout=httpx.Timeout(30, read=300))
+        self.c, self.ext = auth.client_for(self.server, token)
 
     def req(self, method, path, **kw):
         r = self.c.request(method, path, extensions=self.ext, **kw)
@@ -189,9 +180,11 @@ def cmd_usage(a):
 
 
 def cmd_login(a):
-    auth.device_login(server=a.server, issuer=a.issuer)
+    username = a.username or input("nam-e karbari (username): ").strip()
+    password = os.environ.get("NOVA_PASSWORD") or getpass.getpass("gozarvazheh (password): ")
+    creds = auth.login(a.server, username, password)
     me = Api().req("GET", "/v1/me")
-    print(f"vared shodid be onvan-e {me['email']}")
+    print(f"vared shodid be onvan-e {me['email']} ({creds['customer']})")
     return EXIT_OK
 
 
@@ -206,7 +199,7 @@ def main(argv=None):
     p.add_argument("--version", action="version", version=f"nova {__version__}")
     p.add_argument("--json", action="store_true", help="khoroji-e JSON baraye script va CI")
     sub = p.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("login"); s.add_argument("--server", default=auth.DEFAULT_SERVER); s.add_argument("--issuer", default=auth.DEFAULT_ISSUER); s.set_defaults(fn=cmd_login)
+    s = sub.add_parser("login"); s.add_argument("--server", default=auth.DEFAULT_SERVER); s.add_argument("--username", "-u"); s.set_defaults(fn=cmd_login)
     sub.add_parser("logout").set_defaults(fn=cmd_logout)
     sub.add_parser("whoami").set_defaults(fn=cmd_whoami)
     s = sub.add_parser("run"); s.add_argument("task"); s.add_argument("--model"); s.add_argument("--timeout", type=int, default=1800); s.set_defaults(fn=cmd_run)
