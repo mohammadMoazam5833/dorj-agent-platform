@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import logging
 import secrets
 import time
@@ -113,13 +114,45 @@ def session_key(ident: Identity) -> str:
     return base64.b64decode(s.data["session-api-key"]).decode()
 
 
+def _tenant_token(ident: Identity) -> str:
+    from . import tenants
+
+    c = tenants.by_name(ident.slug)
+    return c["token"] if c else ""
+
+
+def llm_key(ident: Identity) -> str | None:
+    """The user's LiteLLM virtual key (made with the workspace); None before the first workspace."""
+    core, _ = _apis()
+    try:
+        s = core.read_namespaced_secret(name_for(ident.slug), settings.workspace_namespace)
+    except ApiException as e:
+        if e.status == 404:
+            return None
+        raise
+    return base64.b64decode(s.data["llm-api-key"]).decode()
+
+
 def _deployment(ident: Identity) -> client.V1Deployment:
     n = name_for(ident.slug)
+
+    def from_secret(var, key):
+        return client.V1EnvVar(name=var, value_from=client.V1EnvVarSource(
+            secret_key_ref=client.V1SecretKeySelector(name=n, key=key)))
+
     env = [
-        client.V1EnvVar(name="SESSION_API_KEY", value_from=client.V1EnvVarSource(
-            secret_key_ref=client.V1SecretKeySelector(name=n, key="session-api-key"))),
+        from_secret("SESSION_API_KEY", "session-api-key"),
         client.V1EnvVar(name="HOME", value=HOME),
         client.V1EnvVar(name="OPENHANDS_SUPPRESS_BANNER", value="1"),
+        # NovaAgent reverse workspace: the agent's file/terminal tools run on the customer's PC through
+        # the gateway (sidecar_bridge); /c/<name>/v1 only reaches this customer's own connection
+        client.V1EnvVar(name="NOVAAGENT_LOCAL_TOOLS_URL", value=f"{settings.gateway_url}/c/{ident.slug}"),
+        from_secret("NOVAAGENT_CUSTOMER_WORKSPACE_TOKEN", "tenant-token"),
+        client.V1EnvVar(name="NOVAAGENT_TENANT", value=ident.slug),
+        # the app's company-managed LLM profile names the public /llmapi; in-cluster it goes straight to LiteLLM
+        client.V1EnvVar(name="NOVA_LLM_PUBLIC_BASE", value=f"{settings.public_url}/llmapi"),
+        client.V1EnvVar(name="NOVA_LLM_INTERNAL_BASE", value=settings.litellm_url),
+        client.V1EnvVar(name="NOVA_REASONING_EFFORT_MAP", value=settings.reasoning_effort_map),
     ]
     probe = client.V1Probe(http_get=client.V1HTTPGetAction(path="/alive", port=settings.agent_server_port),
                            period_seconds=5, failure_threshold=60)
@@ -150,7 +183,9 @@ def _deployment(ident: Identity) -> client.V1Deployment:
             replicas=1, strategy=client.V1DeploymentStrategy(type="Recreate"),
             selector=client.V1LabelSelector(match_labels={LABEL_USER: ident.slug, "app.kubernetes.io/component": "workspace"}),
             template=client.V1PodTemplateSpec(
-                metadata=client.V1ObjectMeta(labels=_labels(ident), annotations={"sidecar.istio.io/inject": "false"}),
+                metadata=client.V1ObjectMeta(labels=_labels(ident), annotations={
+                    "sidecar.istio.io/inject": "false",
+                    "nova.isigpu.local/tenant-token-sha": hashlib.sha256(_tenant_token(ident).encode()).hexdigest()[:16]}),
                 spec=pod)))
 
 
@@ -159,7 +194,8 @@ async def _create(ident: Identity) -> None:
     ns, n = settings.workspace_namespace, name_for(ident.slug)
     llm_key = await llmkeys.create_user_key(ident.email, ident.slug)
     secret = client.V1Secret(metadata=client.V1ObjectMeta(name=n, labels=_labels(ident)),
-                             string_data={"session-api-key": secrets.token_urlsafe(32), "llm-api-key": llm_key})
+                             string_data={"session-api-key": secrets.token_urlsafe(32), "llm-api-key": llm_key,
+                                          "tenant-token": _tenant_token(ident)})
     pvc = client.V1PersistentVolumeClaim(
         metadata=client.V1ObjectMeta(name=n, labels=_labels(ident)),
         spec=client.V1PersistentVolumeClaimSpec(access_modes=["ReadWriteOnce"], storage_class_name=settings.storage_class,
@@ -179,7 +215,18 @@ async def _create(ident: Identity) -> None:
     log.info("workspace created", extra={"user": ident.email, "workspace": n, "event": "created"})
 
 
+async def sync_tenant_token(ident: Identity) -> None:
+    """Keep the workspace Secret's tenant-token equal to the registry (first rollout, rotation)."""
+    core, _ = _apis()
+    tok = _tenant_token(ident)
+    sec = await asyncio.to_thread(core.read_namespaced_secret, name_for(ident.slug), settings.workspace_namespace)
+    if base64.b64decode((sec.data or {}).get("tenant-token", "") or b"").decode() != tok:
+        await asyncio.to_thread(core.patch_namespaced_secret, name_for(ident.slug), settings.workspace_namespace,
+                                {"stringData": {"tenant-token": tok}})
+
+
 async def _apply_template(ident: Identity) -> None:
+    await sync_tenant_token(ident)
     _, apps = _apis()
     want = _deployment(ident)
     body = {"spec": {"template": client.ApiClient().sanitize_for_serialization(want.spec.template)}}
@@ -195,21 +242,44 @@ async def _scale(slug: str, replicas: int) -> None:
 _locks: dict[str, asyncio.Lock] = {}
 
 
+_drift_checked: dict[str, float] = {}
+
+
+def _drifted(ident: Identity) -> bool:
+    """Running workspace still on an older template (image) or an old tenant token (rotation)."""
+    _, apps = _apis()
+    dep = apps.read_namespaced_deployment(name_for(ident.slug), settings.workspace_namespace)
+    tpl = dep.spec.template
+    want_sha = hashlib.sha256(_tenant_token(ident).encode()).hexdigest()[:16]
+    return (tpl.spec.containers[0].image != settings.agent_server_image
+            or (tpl.metadata.annotations or {}).get("nova.isigpu.local/tenant-token-sha") != want_sha)
+
+
 async def ensure_ready(ident: Identity) -> Workspace:
     """Create or wake the user's workspace and wait until it answers. Single-flight per user."""
     lock = _locks.setdefault(ident.slug, asyncio.Lock())
     async with lock:
         ws = await asyncio.to_thread(get, ident)
         if ws.state == "ready":
-            return ws
+            if time.monotonic() - _drift_checked.get(ident.slug, 0) < 60:
+                return ws
+            _drift_checked[ident.slug] = time.monotonic()
+            if not await asyncio.to_thread(_drifted, ident):
+                return ws
+            log.info("workspace template changed; rolling", extra={"workspace": name_for(ident.slug), "event": "rollout"})
+            ws = Workspace(ws.slug, ws.email, "starting", ws.replicas, 0, ws.last_activity, ws.service_url)
         t0, kind = time.monotonic(), "wake"
+        if ws.state != "missing":
+            await _touch_slug(ident.slug, force=True)
         if ws.state == "missing":
             kind = "create"
             await _create(ident)
+            await sync_tenant_token(ident)      # Secret may pre-date the gateway (409 on create)
         else:
             # roll the user's workspace onto the current template (image, limits, security) whenever
             # it is not ready - this is how existing workspaces pick up a nova-control upgrade
             await _apply_template(ident)
+            await asyncio.sleep(3)    # let the Recreate rollout take the old pod down before polling readiness
             if ws.replicas == 0:
                 await _scale(ident.slug, 1)
                 WS_EVENTS.labels("woken").inc()
@@ -259,23 +329,33 @@ _last_touch: dict[str, float] = {}
 
 async def touch(ident: Identity) -> None:
     """Record activity on the Deployment (throttled to once a minute per user per replica)."""
+    await _touch_slug(ident.slug)
+
+
+async def _touch_slug(slug: str, force: bool = False) -> None:
     now = time.time()
-    if now - _last_touch.get(ident.slug, 0) < 60:
+    if not force and now - _last_touch.get(slug, 0) < 60:
         return
-    _last_touch[ident.slug] = now
+    _last_touch[slug] = now
     _, apps = _apis()
     try:
-        await asyncio.to_thread(apps.patch_namespaced_deployment, name_for(ident.slug), settings.workspace_namespace,
+        await asyncio.to_thread(apps.patch_namespaced_deployment, name_for(slug), settings.workspace_namespace,
                                 {"metadata": {"annotations": {ANN_ACTIVITY: str(now)}}})
     except ApiException:
         pass
 
 
-async def reconcile_forever(active_sockets) -> None:
+async def reconcile_forever(local_active) -> None:
     """Scale idle workspaces to zero and publish per-state gauges. Runs in every replica; the
-    operations are idempotent, so no leader election is needed for v1."""
+    operations are idempotent, so no leader election is needed for v1.
+
+    ``local_active()`` -> slugs with an open UI socket or customer tunnel on *this* replica. Those
+    are touched first, so the shared last-activity annotation keeps a customer's workspace up for
+    as long as their app is open, whichever replica holds the connection."""
     while True:
         try:
+            for slug in local_active():
+                await _touch_slug(slug)
             _, apps = _apis()
             deps = await asyncio.to_thread(apps.list_namespaced_deployment, settings.workspace_namespace,
                                            label_selector=f"{LABEL_APP}=nova,app.kubernetes.io/component=workspace")
@@ -286,7 +366,7 @@ async def reconcile_forever(active_sockets) -> None:
                 counts[st] = counts.get(st, 0) + 1
                 slug = d.metadata.labels.get(LABEL_USER)
                 act = _activity(d) or 0
-                if st == "ready" and not active_sockets(slug) and now - act > settings.idle_minutes * 60:
+                if st == "ready" and now - act > settings.idle_minutes * 60:
                     await _scale(slug, 0)
                     WS_EVENTS.labels("idle_stopped").inc()
                     log.info("workspace idle, scaled to zero", extra={"workspace": d.metadata.name, "event": "idle_stopped"})

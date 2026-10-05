@@ -10,6 +10,16 @@ def _env(name: str, default: str = "") -> str:
 @dataclass(frozen=True)
 class Settings:
     workspace_namespace: str = field(default_factory=lambda: _env("NOVA_WS_NAMESPACE", "nova-ws"))
+    control_namespace: str = field(default_factory=lambda: _env("NOVA_NAMESPACE", "nova"))
+    public_url: str = field(default_factory=lambda: _env("NOVA_PUBLIC_URL", "https://nova.isigpu.local"))
+    gateway_url: str = field(default_factory=lambda: _env("NOVA_GATEWAY_URL", "http://nova-gateway.nova.svc.cluster.local:18766"))
+    registry_token: str = field(default_factory=lambda: _env("NOVA_REGISTRY_TOKEN"))
+    keycloak_url: str = field(default_factory=lambda: _env("NOVA_KEYCLOAK_URL", "http://keycloak.auth.svc.cluster.local"))
+    keycloak_realm: str = field(default_factory=lambda: _env("NOVA_REALM", "nova"))
+    desktop_client_id: str = field(default_factory=lambda: _env("NOVA_DESKTOP_CLIENT_ID", "nova-desktop"))
+    desktop_client_secret: str = field(default_factory=lambda: _env("NOVA_DESKTOP_CLIENT_SECRET"))
+    admin_group: str = field(default_factory=lambda: _env("NOVA_ADMIN_GROUP", "nova-admins"))
+    reasoning_effort_map: str = field(default_factory=lambda: _env("NOVA_REASONING_EFFORT_MAP"))
     agent_server_image: str = field(default_factory=lambda: _env("NOVA_AGENT_SERVER_IMAGE"))
     agent_server_port: int = field(default_factory=lambda: int(_env("NOVA_AGENT_SERVER_PORT", "8000")))
     storage_class: str = field(default_factory=lambda: _env("NOVA_WS_STORAGE_CLASS", "ceph-block"))
@@ -24,8 +34,6 @@ class Settings:
     allowed_models: tuple = field(default_factory=lambda: tuple(m for m in _env("NOVA_ALLOWED_MODELS", "qwen3").split(",") if m))
     monthly_budget_usd: float = field(default_factory=lambda: float(_env("NOVA_MONTHLY_BUDGET_USD", "0") or 0))
     web_root: str = field(default_factory=lambda: _env("NOVA_WEB_ROOT", "/srv/nova-web"))
-    email_domain: str = field(default_factory=lambda: _env("NOVA_EMAIL_DOMAIN", "isigpu.local"))
-    trust_identity_headers: bool = field(default_factory=lambda: _env("NOVA_TRUST_IDENTITY_HEADERS", "true") == "true")
 
 
 settings = Settings()

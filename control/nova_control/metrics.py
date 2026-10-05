@@ -12,3 +12,5 @@ WS_EVENTS = Counter("nova_workspace_events_total", "Workspace lifecycle events",
 WS_ACTIVE = Gauge("nova_workspaces", "Workspaces by state", ["state"])
 WS_SOCKETS = Gauge("nova_websocket_connections", "Open proxied WebSocket connections")
 LLM_KEY_EVENTS = Counter("nova_llm_key_events_total", "LiteLLM virtual key operations", ["event"])
+TUNNELS = Gauge("nova_workspace_tunnels", "Connected customer PCs (reverse workspace tunnels)")
+LOGINS = Counter("nova_logins_total", "Desktop sign-ins", ["result"])
