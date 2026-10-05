@@ -50,15 +50,27 @@ class Workspace:
 _loaded = False
 
 
+_api_pair = None
+
+
 def _apis():
-    global _loaded
-    if not _loaded:
-        try:
-            config.load_incluster_config()
-        except config.ConfigException:
-            config.load_kube_config()
-        _loaded = True
-    return client.CoreV1Api(), client.AppsV1Api()
+    """One shared ApiClient (one urllib3 pool, kept-alive connections). A fresh ApiClient per call
+    opened a new TCP+TLS connection to the API server every time - each one also a Falco "Contact
+    K8S API Server" alert, i.e. a rewrite of the falco-alerts ConfigMap in etcd (2026-10-05 etcd
+    NOSPACE outage)."""
+    global _loaded, _api_pair
+    if _api_pair is None:
+        if not _loaded:
+            try:
+                config.load_incluster_config()
+            except config.ConfigException:
+                config.load_kube_config()
+            _loaded = True
+        cfg = client.Configuration.get_default_copy()
+        cfg.connection_pool_maxsize = 32
+        api = client.ApiClient(cfg)
+        _api_pair = (client.CoreV1Api(api), client.AppsV1Api(api))
+    return _api_pair
 
 
 def name_for(slug: str) -> str:

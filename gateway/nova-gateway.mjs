@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * NovaAgent reverse-workspace gateway for Kubernetes: runs NovaAgent's own
- * scripts/customer-workspace-gateway.mjs unchanged and keeps its customer registry
+ * scripts/customer-workspace-gateway.mjs (plus the security fix in patch_gateway.py) and keeps its customer registry
  * file (NOVAAGENT_CUSTOMERS_FILE, hot-reloaded by mtime) in sync with nova-control,
  * which owns the registry (Keycloak-authenticated users -> tenant tokens).
  *

@@ -38,7 +38,11 @@ class SidecarClient:
         with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
-    def request(self, type_: str, params: dict[str, Any] | None = None, *, id_: str = "1") -> Any:
+    def request(self, type_: str, params: dict[str, Any] | None = None, *, id_: str | None = None) -> Any:
+        if id_ is None:  # NovaAgent-on-k8s: unique ids (was always "1"; see gateway/patch_gateway.py)
+            import uuid
+
+            id_ = uuid.uuid4().hex
         body = {
             "v": PROTOCOL_VERSION,
             "id": id_,

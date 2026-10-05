@@ -309,6 +309,13 @@ async def customer_workspace(websocket: WebSocket):
                 t.cancel()
     except (WebSocketDisconnect, websockets.ConnectionClosed, OSError):
         pass
+    except (websockets.InvalidHandshake, NotImplementedError):
+        # gateway refused (e.g. a brand-new customer not yet in its registry, synced every few
+        # seconds): ask the app to retry instead of surfacing a 500
+        try:
+            await websocket.close(code=1013)
+        except RuntimeError:
+            pass
     finally:
         WS_SOCKETS.dec()
         TUNNELS.dec()

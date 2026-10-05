@@ -25,7 +25,7 @@ from .identity import Identity, slug_for
 log = logging.getLogger("nova.tenants")
 SECRET = "nova-customers"
 KEY = "customers.json"
-_CACHE_TTL_S = 3.0
+_CACHE_TTL_S = 15.0   # writes from this replica refresh it at once; other replicas within 15 s
 _lock = threading.Lock()
 _cache: tuple[float, list[dict], str | None] = (0.0, [], None)
 
