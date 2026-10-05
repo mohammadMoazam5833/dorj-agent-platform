@@ -1,0 +1,176 @@
+<!doctype html>
+<!-- NovaAgent splash (nova-platform/desktop overlay): everything in one card - brand, live status,
+     progress, hint, the startup log (expands in place) and the actions. Same contract as
+     NovaAgent's electron/loading.html: window.__setLoadingStatus(line), #status, #log, #copy-logs,
+     #quit-button, body.failed, and window.desktopBoot (preload.cjs) for log batches / fatal /
+     copy / quit / setDetailsExpanded. The frameless window is 460x360, 560 high with details. -->
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src 'self'" />
+<title>NovaAgent</title>
+<style>
+  @font-face { font-family: 'Vazirmatn'; src: url(vazirmatn-400.woff2) format('woff2'); font-weight: 400; }
+  @font-face { font-family: 'Vazirmatn'; src: url(vazirmatn-600.woff2) format('woff2'); font-weight: 600 800; }
+  :root { --oh-background: #0b0e14; --card: #12151f; --line: rgba(255,255,255,.08); --fg: #eef1f6; --muted: #9aa3b5;
+          --coral: #e0805f; --violet: #8b7cf6; --err: #ff8b80; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--oh-background); color: var(--fg); font-family: 'Vazirmatn', 'Segoe UI', Tahoma, system-ui, sans-serif;
+         padding: 10px; overflow: hidden; user-select: none; -webkit-app-region: drag; }
+  .card { height: 100%; display: flex; flex-direction: column; border-radius: 18px; border: 1px solid var(--line);
+          background: radial-gradient(120% 80% at 100% 0%, rgba(139,124,246,.16), transparent 55%),
+                      radial-gradient(90% 70% at 0% 100%, rgba(224,128,95,.12), transparent 60%), var(--card);
+          box-shadow: 0 24px 60px rgba(0,0,0,.45); overflow: hidden; }
+  .top { padding: 26px 26px 0; display: flex; align-items: center; gap: 14px; }
+  .mark { width: 52px; height: 52px; flex-shrink: 0; filter: drop-shadow(0 8px 18px rgba(224,128,95,.25)); animation: float 3.2s ease-in-out infinite; }
+  @keyframes float { 50% { transform: translateY(-4px); } }
+  .name { font-size: 22px; font-weight: 800; direction: ltr; letter-spacing: 0; }
+  .name b { color: var(--coral); }
+  .tagline { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+  .body { padding: 22px 26px 0; }
+  .status { margin: 0 0 12px; font-size: 14px; font-weight: 600; min-height: 22px; }
+  .bar { position: relative; height: 4px; border-radius: 4px; background: rgba(255,255,255,.07); overflow: hidden; }
+  .bar::before { content: ""; position: absolute; inset: 0; width: 38%; border-radius: 4px;
+                 background: linear-gradient(90deg, var(--coral), var(--violet)); animation: slide 1.4s ease-in-out infinite; }
+  [dir=rtl] .bar::before { animation-name: slide-rtl; }
+  @keyframes slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(270%); } }
+  @keyframes slide-rtl { 0% { transform: translateX(110%); } 100% { transform: translateX(-270%); } }
+  .hint { margin: 12px 0 0; font-size: 12px; line-height: 1.8; color: var(--muted); }
+  body.failed .bar::before { animation: none; width: 100%; background: var(--err); }
+  body.failed .status { color: var(--err); }
+  body.failed .hint { display: none; }
+  .log-wrap { flex: 1; min-height: 0; margin: 14px 26px 0; display: none; flex-direction: column; border: 1px solid var(--line);
+              border-radius: 12px; background: rgba(0,0,0,.28); overflow: hidden; }
+  body.details .log-wrap { display: flex; }
+  .log { flex: 1; overflow: auto; padding: 8px 10px; direction: ltr; text-align: left; user-select: text; -webkit-app-region: no-drag;
+         font: 11px/1.55 ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; color: #c9d1de; }
+  .log-line { white-space: pre-wrap; word-break: break-all; }
+  .log-line-error { color: var(--err); }
+  .log-name { color: var(--violet); }
+  .foot { margin-top: auto; padding: 14px 20px 16px; display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--line);
+          background: rgba(0,0,0,.12); -webkit-app-region: no-drag; }
+  .spacer { flex: 1; }
+  button { font: 600 12.5px 'Vazirmatn', 'Segoe UI', sans-serif; color: var(--fg); background: rgba(255,255,255,.06);
+           border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: rgba(224,128,95,.6); }
+  .quit-button { display: none; color: #1a0f0a; background: var(--coral); border-color: var(--coral); }
+  body.failed .quit-button { display: inline-block; }
+  .copy { display: none; }
+  body.details .copy { display: inline-block; }
+  .lang { color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .mark, .bar::before { animation: none; } }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="top">
+      <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
+        <rect x="4" y="4" width="56" height="56" rx="16" fill="#0a0d13" stroke="rgba(224,128,95,.55)" stroke-width="1.5"/>
+        <path d="M20 44V20L44 44V20" fill="none" stroke="#eef1f6" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="44" cy="18" r="4" fill="#e0805f"/>
+      </svg>
+      <div>
+        <div class="name"><b>Nova</b>Agent</div>
+        <p class="tagline" data-t="tagline"></p>
+      </div>
+    </div>
+    <div class="body">
+      <p id="status" class="status" aria-live="polite"></p>
+      <div class="bar" role="progressbar" aria-busy="true"></div>
+      <p class="hint" data-t="hint"></p>
+    </div>
+    <div class="log-wrap" aria-label="Startup log"><div id="log" class="log"></div></div>
+    <div class="foot">
+      <button id="details" type="button"></button>
+      <button id="copy-logs" type="button" class="copy"></button>
+      <span class="spacer"></span>
+      <button id="lang" type="button" class="lang"></button>
+      <button id="quit-button" type="button" class="quit-button"></button>
+    </div>
+  </main>
+<script>
+  var T = {
+    fa: { tagline: "دستیار هوشمند توسعه‌ی نرم‌افزار", hint: "در حال اتصال به فضای کاری شما. اولین اجرا ممکن است کمی طول بکشد.",
+          details: "جزئیات", hide: "پنهان کردن جزئیات", copy: "کپی گزارش", copied: "کپی شد", quit: "خروج", lang: "English",
+          start: "در حال آماده‌سازی…" },
+    en: { tagline: "Your AI development workspace", hint: "Connecting to your workspace. The first launch can take a little while.",
+          details: "Details", hide: "Hide details", copy: "Copy log", copied: "Copied", quit: "Quit", lang: "فارسی",
+          start: "Starting…" }
+  };
+  // status lines the main process sends (English) -> shown in the chosen language
+  var STATUS_FA = [[/^opening remote novaagent/i, "در حال باز کردن NovaAgent…"], [/^ready\.?$/i, "آماده است"],
+                   [/^starting/i, "در حال آماده‌سازی…"], [/^connecting/i, "در حال اتصال…"]];
+  var lang = "fa";
+  try { lang = localStorage.getItem("nova-lang") || "fa"; } catch (e) {}
+  var raw = "", detailsOpen = false;
+  var statusEl = document.getElementById("status");
+  function tr(line) {
+    if (lang !== "fa" || !line) return line;
+    for (var i = 0; i < STATUS_FA.length; i++) if (STATUS_FA[i][0].test(line)) return STATUS_FA[i][1];
+    return line;
+  }
+  function apply() {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "fa" ? "rtl" : "ltr";
+    document.querySelectorAll("[data-t]").forEach(function (el) { el.textContent = T[lang][el.dataset.t]; });
+    document.getElementById("details").textContent = detailsOpen ? T[lang].hide : T[lang].details;
+    document.getElementById("copy-logs").textContent = T[lang].copy;
+    document.getElementById("quit-button").textContent = T[lang].quit;
+    document.getElementById("lang").textContent = T[lang].lang;
+    if (!document.body.classList.contains("failed")) statusEl.textContent = tr(raw) || T[lang].start;
+  }
+  // called by electron/main.mjs (setLoadingStatus) via executeJavaScript
+  window.__setLoadingStatus = function (line) {
+    raw = String(line == null ? "" : line);
+    if (!document.body.classList.contains("failed")) statusEl.textContent = tr(raw) || T[lang].start;
+  };
+  (function () {
+    var boot = window.desktopBoot;
+    var logEl = document.getElementById("log");
+    var MAX_LINES = 2000, pinned = true;
+    logEl.addEventListener("scroll", function () { pinned = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 8; });
+    function setDetails(open) {
+      detailsOpen = open;
+      document.body.classList.toggle("details", open);
+      if (boot) boot.setDetailsExpanded(open);
+      apply();
+      if (open && pinned) logEl.scrollTop = logEl.scrollHeight;
+    }
+    function appendBatch(batch) {
+      if (!batch || !batch.length) return;
+      var frag = document.createDocumentFragment();
+      for (var i = 0; i < batch.length; i++) {
+        var e = batch[i], row = document.createElement("div");
+        row.className = "log-line" + (e.level === "error" ? " log-line-error" : "");
+        var n = document.createElement("span"); n.className = "log-name"; n.textContent = "[" + e.name + "]";
+        row.appendChild(n); row.appendChild(document.createTextNode(" " + e.line));   // untrusted: text only
+        frag.appendChild(row);
+      }
+      logEl.appendChild(frag);
+      while (logEl.childElementCount > MAX_LINES) logEl.removeChild(logEl.firstElementChild);
+      if (pinned) logEl.scrollTop = logEl.scrollHeight;
+    }
+    document.getElementById("details").addEventListener("click", function () { setDetails(!detailsOpen); });
+    document.getElementById("lang").addEventListener("click", function () {
+      lang = lang === "fa" ? "en" : "fa"; try { localStorage.setItem("nova-lang", lang); } catch (e) {} apply();
+    });
+    var copyBtn = document.getElementById("copy-logs");
+    copyBtn.addEventListener("click", function () {
+      if (!boot) return;
+      boot.copyLogs().then(function () { copyBtn.textContent = T[lang].copied; setTimeout(function () { copyBtn.textContent = T[lang].copy; }, 1200); });
+    });
+    document.getElementById("quit-button").addEventListener("click", function () { if (boot) boot.quit(); });
+    if (boot) {
+      boot.onLogBatch(appendBatch);
+      boot.onFatal(function (summary) {
+        document.body.classList.add("failed");
+        statusEl.textContent = String(summary == null ? "" : summary);
+        setDetails(true);
+      });
+    }
+    apply();
+  })();
+</script>
+</body>
+</html>

@@ -22,10 +22,20 @@ upstream change fails the build loudly instead of silently shipping an unpatched
      1777 tmpfs (customer report 2026-10-05, 1.6.3 -> 1.6.5); Chromium then keeps shared memory
      under the temp directory instead.
 
+  9. Wayland: the main window (and the splash) are revealed by ready-to-show OR did-finish-load +
+     500 ms - a never-shown window is never mapped on Wayland and never fires ready-to-show
+     (customer report 2026-10-05: splash forever). Background throttling off for the main window.
+ 10. Tunnel close codes: the gateway's 4001 session_replaced (account opened on another computer)
+     stops the client instead of an endless reconnect loop; the app explains it and offers to take
+     the session back. Single app instance; EADDRINUSE on the sidecar port is reported; token
+     check has a timeout; no stale VM address in company-llm.json.
+ 11. Redesigned splash (loading.html): everything in one card, fa/en, same IPC contract.
+
 Usage: overlay.py <staged NovaAgent dir> <overlay dir (this desktop/ folder)>
 """
 import pathlib
 import shutil
+import subprocess
 import sys
 
 stage, overlay = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
@@ -87,6 +97,7 @@ async function workspaceTokenStillValid(remoteUiUrl, token) {
   try {
     const res = await electronNet.fetch(new URL("/v1/me", remoteUiUrl).toString(), {
       headers: { "X-Session-API-Key": token },
+      signal: AbortSignal.timeout(8000), // a hung /v1/me must not block the whole boot
     });
     return res.status !== 401 && res.status !== 403;
   } catch {
@@ -103,6 +114,58 @@ function forgetWorkspaceToken() {
   } catch {
     // nothing stored
   }
+}
+
+// Two app instances raced for the sidecar port (18765) - one instance per user session; a second
+// launch just brings the first window forward.
+if (!app.requestSingleInstanceLock()) {
+  app.exit(0);
+}
+app.on("second-instance", () => {
+  const w = [mainWin, loadingWin].find((x) => x && !x.isDestroyed());
+  if (w) {
+    if (w.isMinimized()) w.restore();
+    w.show();
+    w.focus();
+  }
+});
+
+let novaElsewhereDialogOpen = false;
+/** The gateway closed our tunnel with a policy code (4001 session_replaced: this account was opened
+ *  on another computer). Say so instead of reconnecting forever; offer to take the session back. */
+async function showAccountInUseElsewhere(remoteUiUrl) {
+  if (novaElsewhereDialogOpen) return;
+  novaElsewhereDialogOpen = true;
+  try {
+    const parent = [mainWin, loadingWin].find((x) => x && !x.isDestroyed()) || undefined;
+    const { response } = await dialog.showMessageBox(parent, {
+      type: "warning",
+      title: "NovaAgent",
+      message: "این حساب در رایانه‌ی دیگری باز است.\\nThis NovaAgent account is open on another computer.",
+      detail:
+        "تا وقتی آن‌جا باز است، دستیار به فایل‌های این رایانه دسترسی ندارد. با «استفاده در این رایانه» اتصال به این‌جا منتقل می‌شود.\\n\\n" +
+        "While it is open there, the assistant cannot work on this computer's files. «Use it here» moves the connection to this computer.",
+      buttons: ["استفاده در این رایانه / Use it here", "بستن / Close"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (response === 0) startCustomerWorkspaceReverseClient(remoteUiUrl);
+  } finally {
+    novaElsewhereDialogOpen = false;
+  }
+}
+
+function showSidecarPortInUse() {
+  const parent = [mainWin, loadingWin].find((x) => x && !x.isDestroyed()) || undefined;
+  dialog.showMessageBox(parent, {
+    type: "error",
+    title: "NovaAgent",
+    message: "پورت محلی NovaAgent (18765) در اختیار برنامه‌ی دیگری است.\\nNovaAgent's local port (18765) is in use by another program.",
+    detail: "برنامه‌ی دیگر را ببندید و NovaAgent را دوباره باز کنید.\\nClose the other program and restart NovaAgent.",
+    buttons: ["OK"],
+    noLink: true,
+  });
 }
 
 function installNovaMenu() {
@@ -164,6 +227,156 @@ main_edits_linux = [
     ),
 ]
 edit("electron/main.mjs", main_edits_linux)
+
+edit("electron/main.mjs", [
+    (  # Bug 1: on Wayland a never-shown window is never mapped, renders no frame and never emits
+       # ready-to-show - the splash stayed forever (customer report 2026-10-05, CDP: DOM complete,
+       # 0 rAF frames). ready-to-show stays the primary path; did-finish-load + 500 ms reveals
+       # anyway; a "revealed" flag makes it run once.
+        """  mainWin.loadURL(uiOrigin);
+
+  mainWin.once("ready-to-show", () => {
+    loadingWin?.destroy();
+    loadingWin = null;
+    mainWin?.show();
+    mainWin?.maximize();
+  });""",
+        """  mainWin.webContents.setBackgroundThrottling(false);
+  mainWin.loadURL(uiOrigin);
+
+  let revealed = false;
+  const reveal = (via) => {
+    if (revealed || !mainWin || mainWin.isDestroyed()) return;
+    revealed = true;
+    try {
+      loadingWin?.destroy();
+    } catch {
+      // already gone
+    }
+    loadingWin = null;
+    mainWin.show();
+    mainWin.maximize();
+    console.log(`[desktop] main window revealed via ${via}`);
+  };
+  // NOVAAGENT_TEST_IGNORE_READY_TO_SHOW=1 (e2e only) drops the primary path so the fallback is
+  // exercised on compositors where ready-to-show does fire.
+  if (process.env.NOVAAGENT_TEST_IGNORE_READY_TO_SHOW !== "1") {
+    mainWin.once("ready-to-show", () => reveal("ready-to-show"));
+  }
+  mainWin.webContents.once("did-finish-load", () => {
+    setTimeout(() => reveal("did-finish-load fallback"), 500);
+  });""",
+    ),
+    (  # ... and the sign-in window (a new user on Wayland would never see it otherwise)
+        '    loginWin.loadFile(join(__dirname, "login-prompt.html"));\n    loginWin.once("ready-to-show", () => loginWin.show());',
+        '    loginWin.loadFile(join(__dirname, "login-prompt.html"));\n'
+        '    loginWin.once("ready-to-show", () => loginWin.show());\n'
+        '    loginWin.webContents.once("did-finish-load", () => {\n'
+        '      setTimeout(() => { if (!loginWin.isDestroyed() && !loginWin.isVisible()) loginWin.show(); }, 500);\n'
+        '    });',
+    ),
+    (  # ... and the server-address prompt
+        '    promptWin.loadFile(join(__dirname, "remote-url-prompt.html"));\n    promptWin.once("ready-to-show", () => promptWin.show());',
+        '    promptWin.loadFile(join(__dirname, "remote-url-prompt.html"));\n'
+        '    promptWin.once("ready-to-show", () => promptWin.show());\n'
+        '    promptWin.webContents.once("did-finish-load", () => {\n'
+        '      setTimeout(() => { if (!promptWin.isDestroyed() && !promptWin.isVisible()) promptWin.show(); }, 500);\n'
+        '    });',
+    ),
+    (  # same for the splash itself
+        '  loadingWin.loadFile(join(__dirname, "loading.html"));\n  loadingWin.once("ready-to-show", () => loadingWin?.show());',
+        '  loadingWin.loadFile(join(__dirname, "loading.html"));\n'
+        '  loadingWin.once("ready-to-show", () => loadingWin?.show());\n'
+        '  loadingWin.webContents.once("did-finish-load", () => {\n'
+        '    setTimeout(() => { if (loadingWin && !loadingWin.isDestroyed() && !loadingWin.isVisible()) loadingWin.show(); }, 500);\n'
+        '  });',
+    ),
+    (  # Bug 2: the tunnel client exits 3 after a policy close (4xxx) - tell the user why
+        """    console.log(
+      `[desktop] customer workspace client exited (code=${code}, signal=${signal})`,
+    );""",
+        """    console.log(
+      `[desktop] customer workspace client exited (code=${code}, signal=${signal})`,
+    );
+    if (code === 3) showAccountInUseElsewhere(remoteUiUrl);""",
+    ),
+    (  # hardening 2: sidecar exits 4 on EADDRINUSE
+        """    console.log(
+      `[desktop] local tools sidecar exited (code=${code}, signal=${signal})`,
+    );""",
+        """    console.log(
+      `[desktop] local tools sidecar exited (code=${code}, signal=${signal})`,
+    );
+    if (code === 4) showSidecarPortInUse();""",
+    ),
+])
+
+# Bug 2 + hardening 2 in the customer-side scripts
+subprocess.run([sys.executable, str(overlay.resolve().parent / "patches" / "ws_close_codes.py"), str(stage / "scripts")], check=True)
+edit("scripts/customer-workspace/client.mjs", [
+    (
+        """    try {
+      session = await connectWebSocket(options.gatewayWsUrl, {""",
+        """    let mine = null; // this connection's session (a late close of an older one must not stop us)
+    try {
+      session = await connectWebSocket(options.gatewayWsUrl, {""",
+    ),
+    (
+        """        onClose: () => {
+          stopPinging();
+          session = null;
+          if (!closed && reconnect) scheduleReconnect();
+        },
+      });""",
+        """        onClose: (code, reason) => {
+          log(`[customer-workspace-client] closed: code=${code} reason=${reason || "-"}`);
+          if (session && mine && session !== mine) return; // stale socket of a replaced connection
+          stopPinging();
+          session = null;
+          if (code >= 4000 && code < 5000) {
+            // policy close from the server (4001 session_replaced = account opened on another
+            // computer): reconnecting would just kick the other session - stop and report
+            closed = true;
+            log(`[customer-workspace-client] stopped: code=${code} reason=${reason || "-"} (not reconnecting)`);
+            options.onPolicyClose?.(code, reason);
+            return;
+          }
+          if (!closed && reconnect) scheduleReconnect();
+        },
+      });
+      mine = session;""",
+    ),
+])
+edit("scripts/customer-workspace-client.mjs", [
+    (
+        """    token,
+    reconnect: true,
+  });""",
+        """    token,
+    reconnect: true,
+    // the desktop app (electron/main.mjs) shows "account open on another computer" on exit code 3
+    onPolicyClose: () => process.exit(3),
+  });""",
+    ),
+    ("company UI origin, e.g. http://172.16.40.188:8000", "company UI origin, e.g. https://nova.example.com"),
+])
+edit("scripts/customer-workspace/urls.mjs", [("e.g. http://172.16.40.188:8000", "e.g. https://nova.example.com")])
+edit("scripts/local-tools-sidecar/server.mjs", [
+    (
+        "    listen(cb) {\n      server.listen(options.port, options.host, cb);",
+        "    listen(cb) {\n"
+        "      server.once(\"error\", (err) => {\n"
+        "        if (err && err.code === \"EADDRINUSE\") {\n"
+        "          console.error(`[local-tools-sidecar] port ${options.host}:${options.port} is already in use (another NovaAgent or another program)`);\n"
+        "          process.exit(4);\n"
+        "        }\n"
+        "        throw err;\n"
+        "      });\n"
+        "      server.listen(options.port, options.host, cb);",
+    ),
+])
+# hardening 3: no stale VM address in the shipped company-llm.json (hybrid-only setting)
+(stage / "electron/company-llm.json").write_text('{\n  "companyLlmUrl": null\n}\n', encoding="utf-8")
 edit("electron-builder.config.mjs", [
     (  # 7a: the thin client's binary is "novaagent-client" (extraMetadata name), which upstream's
        # candidate list misses - without this the .deb ships NO launcher wrapper at all and
@@ -262,6 +475,7 @@ export function describeSystem() {
 ''')
 
 shutil.copy(overlay / "login-prompt.html", stage / "electron/login-prompt.html")
+shutil.copy(overlay / "loading.html", stage / "electron/loading.html")
 shutil.copy(overlay / "org-root-ca.crt", stage / "electron/org-root-ca.crt")
 for f in ("vazirmatn-400.woff2", "vazirmatn-600.woff2"):
     shutil.copy(overlay / f, stage / "electron" / f)

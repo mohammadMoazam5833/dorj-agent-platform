@@ -289,13 +289,14 @@ async def customer_workspace(websocket: WebSocket):
     TUNNELS.inc()
     _tunnels[c["name"]] += 1
     log.info("workspace tunnel up", extra={"event": "tunnel_up", "user": c["email"]})
+    close_code, close_reason = 1000, ""
     try:
         async with websockets.connect(url, max_size=None, open_timeout=20, ping_interval=None) as up:
             async def client_to_up():
                 while True:
                     msg = await websocket.receive()
                     if msg["type"] == "websocket.disconnect":
-                        await up.close()
+                        await up.close(code=msg.get("code") or 1000)
                         return
                     await up.send(msg.get("text") if msg.get("text") is not None else msg.get("bytes"))
 
@@ -307,6 +308,10 @@ async def customer_workspace(websocket: WebSocket):
                                                return_when=asyncio.FIRST_COMPLETED)
             for t in pending:
                 t.cancel()
+            # pass the gateway's close code/reason through (e.g. 4001 session_replaced): the app
+            # must be able to tell "account opened on another computer" from a network drop
+            if up.close_code:
+                close_code, close_reason = up.close_code, up.close_reason or ""
     except (WebSocketDisconnect, websockets.ConnectionClosed, OSError):
         pass
     except (websockets.InvalidHandshake, NotImplementedError):
@@ -320,9 +325,10 @@ async def customer_workspace(websocket: WebSocket):
         WS_SOCKETS.dec()
         TUNNELS.dec()
         _tunnels[c["name"]] -= 1
-        log.info("workspace tunnel down", extra={"event": "tunnel_down", "user": c["email"]})
+        log.info("workspace tunnel down", extra={"event": "tunnel_down", "user": c["email"],
+                                                  "reason": f"{close_code} {close_reason}".strip()})
         try:
-            await websocket.close()
+            await websocket.close(code=close_code if close_code not in (1005, 1006) else 1000, reason=close_reason)
         except RuntimeError:
             pass
 

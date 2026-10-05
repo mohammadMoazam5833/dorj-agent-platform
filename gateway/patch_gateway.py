@@ -86,6 +86,18 @@ EDITS = [
             "exec_failed",""",
     ),
 ]
+# A newer connection with the same customer token replaces the older one. Tell the older client
+# why (4001 session_replaced) so it stops reconnecting instead of kicking the newer one back -
+# upstream closed with a bare 1000 and two machines on one account ping-ponged forever.
+EDITS.append(("""    if (existing) {
+      try {
+        existing.sendClose();""", """    if (existing) {
+      try {
+        console.log(`[gateway] customer '${customer.name}' connected again; closing the previous session (4001 session_replaced)`);
+        existing.sendClose(4001, "session_replaced");"""))
+EDITS.append(("""          if (entry.timer) clearInterval(entry.timer);
+          entry.sendClose();""", """          if (entry.timer) clearInterval(entry.timer);
+          entry.sendClose(1001, "gateway_shutdown");"""))
 EDITS.append(("      entry.resolve(makeError(id, code, message));",
               "      entry.resolve(makeError(entry.origId ?? id, code, message));"))
 for old, new in EDITS:
