@@ -1,0 +1,169 @@
+<!doctype html>
+<!-- NovaAgent desktop sign-in (nova-platform/desktop overlay). Same IPC contract as NovaAgent's
+     electron/login-prompt.html: ipcRenderer.send("thin-login-prompt", {action: "save"|"quit", ...});
+     main.mjs writes status/errors into #error and toggles #save. Farsi first, English switch. -->
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src 'self'">
+<title>NovaAgent</title>
+<style>
+  @font-face { font-family: 'Vazirmatn'; src: url(vazirmatn-400.woff2) format('woff2'); font-weight: 400; }
+  @font-face { font-family: 'Vazirmatn'; src: url(vazirmatn-600.woff2) format('woff2'); font-weight: 600 800; }
+  :root { --ink: #0a0d13; --ink2: #15141f; --coral: #e0805f; --coral2: #c96a4a; --violet: #8b7cf6;
+          --paper: #f7f6f9; --card: #ffffff; --text: #0f1420; --muted: #5f6b80; --line: #e2dfe8; --err: #c2413a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: 'Vazirmatn', 'Segoe UI', Tahoma, system-ui, sans-serif; background: var(--paper); color: var(--text);
+         display: grid; grid-template-columns: 5fr 6fr; overflow: hidden; user-select: none; }
+  /* brand half */
+  .brand { position: relative; overflow: hidden; color: #eef1f6; padding: 44px 40px; display: flex; flex-direction: column;
+           background: radial-gradient(120% 90% at 85% 10%, #2a2342 0%, var(--ink2) 48%, var(--ink) 100%); }
+  .brand::before, .brand::after { content: ""; position: absolute; border-radius: 50%; filter: blur(60px); pointer-events: none; }
+  .brand::before { width: 340px; height: 340px; top: -120px; inset-inline-end: -120px; background: rgba(139,124,246,.35); animation: driftA 18s ease-in-out infinite alternate; }
+  .brand::after { width: 280px; height: 280px; bottom: -110px; inset-inline-start: -90px; background: rgba(224,128,95,.22); animation: driftB 22s ease-in-out infinite alternate; }
+  @keyframes driftA { to { transform: translate(-40px, 50px) scale(1.1); } }
+  @keyframes driftB { to { transform: translate(50px, -40px) scale(1.12); } }
+  .logo { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
+  .logo b { color: var(--coral); }
+  .word { font-size: 20px; font-weight: 600; direction: ltr; }
+  .lead { position: relative; z-index: 1; margin: auto 0 0; font-size: 26px; font-weight: 800; line-height: 1.7; }
+  .lead::after { content: ""; display: block; width: 48px; height: 3px; border-radius: 3px; margin: 16px 0 26px; background: linear-gradient(90deg, var(--coral), transparent); }
+  [dir=rtl] .lead::after { background: linear-gradient(270deg, var(--coral), transparent); }
+  ul { list-style: none; margin: 0 0 6px; padding: 0; position: relative; z-index: 1; display: grid; gap: 16px; }
+  li { display: flex; gap: 12px; align-items: flex-start; }
+  .ic { flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--coral);
+        background: rgba(224,128,95,.10); border: 1px solid rgba(224,128,95,.26); }
+  li b { display: block; font-size: 14px; } li span { font-size: 12.5px; color: rgba(225,230,240,.62); }
+  /* form half */
+  .form { position: relative; display: flex; flex-direction: column; justify-content: center; padding: 40px 56px; isolation: isolate; }
+  .form::before { content: ""; position: absolute; z-index: -1; width: 420px; height: 420px; top: -160px; inset-inline-start: -120px;
+                  border-radius: 50%; filter: blur(70px); background: rgba(139,124,246,.16); }
+  .top { position: absolute; top: 20px; inset-inline-end: 24px; }
+  .lang { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: #fff; color: var(--text); border-radius: 999px;
+          padding: 6px 12px; cursor: pointer; }
+  .lang:hover { border-color: var(--coral); }
+  h1 { margin: 0 0 6px; font-size: 24px; font-weight: 800; }
+  .sub { margin: 0 0 26px; color: var(--muted); font-size: 13.5px; line-height: 1.7; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+  .field { position: relative; margin-bottom: 18px; }
+  input { width: 100%; height: 48px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--text);
+          font: 15px 'Vazirmatn', 'Segoe UI', sans-serif; padding: 0 14px; direction: ltr; text-align: left; outline: none; user-select: text;
+          transition: border-color .15s, box-shadow .15s; }
+  input:focus { border-color: var(--coral); box-shadow: 0 0 0 4px rgba(224,128,95,.18); }
+  .eye { position: absolute; inset-inline-start: auto; right: 8px; top: 8px; width: 32px; height: 32px; border: 0; background: none;
+         color: var(--muted); cursor: pointer; border-radius: 8px; display: grid; place-items: center; }
+  .eye:hover { color: var(--text); background: #f2f0f5; }
+  .actions { display: flex; gap: 10px; margin-top: 8px; }
+  button.primary { flex: 1; height: 48px; border: 0; border-radius: 12px; font: 700 15px 'Vazirmatn', 'Segoe UI', sans-serif; cursor: pointer;
+                   color: #1a0f0a; background: linear-gradient(120deg, var(--coral) 0%, var(--coral2) 100%); box-shadow: 0 10px 24px rgba(201,106,74,.25); }
+  button.primary:disabled { opacity: .65; cursor: default; }
+  button.ghost { height: 48px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--muted);
+                 font: 600 14px 'Vazirmatn', 'Segoe UI', sans-serif; cursor: pointer; }
+  button.ghost:hover { color: var(--text); border-color: #cfcad8; }
+  .msg { min-height: 22px; margin-top: 14px; font-size: 13px; color: var(--err); }
+  .msg.info { color: var(--muted); }
+  .note { margin-top: 18px; display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
+  .note svg { color: var(--coral); flex-shrink: 0; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(26,15,10,.25); border-top-color: #1a0f0a;
+             border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-inline-end: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .brand::before, .brand::after, .spinner { animation: none; } }
+</style>
+</head>
+<body>
+  <section class="brand" aria-hidden="true">
+    <div class="logo">
+      <svg viewBox="0 0 64 64" width="36" height="36"><rect x="4" y="4" width="56" height="56" rx="16" fill="#0a0d13" stroke="rgba(224,128,95,.55)" stroke-width="1.5"/><path d="M20 44V20L44 44V20" fill="none" stroke="#eef1f6" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="44" cy="18" r="4" fill="#e0805f"/></svg>
+      <span class="word"><b>Nova</b>Agent</span>
+    </div>
+    <h2 class="lead" data-t="lead"></h2>
+    <ul>
+      <li><span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg></span><div><b data-t="f1"></b><span data-t="f1s"></span></div></li>
+      <li><span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span><div><b data-t="f2"></b><span data-t="f2s"></span></div></li>
+      <li><span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/></svg></span><div><b data-t="f3"></b><span data-t="f3s"></span></div></li>
+    </ul>
+  </section>
+  <main class="form">
+    <div class="top"><button type="button" class="lang" id="lang"></button></div>
+    <h1 data-t="title"></h1>
+    <p class="sub" data-t="sub"></p>
+    <label for="username" data-t="user"></label>
+    <div class="field"><input id="username" type="text" autocomplete="username" spellcheck="false" autofocus></div>
+    <label for="password" data-t="pass"></label>
+    <div class="field">
+      <input id="password" type="password" autocomplete="current-password">
+      <button type="button" class="eye" id="eye" tabindex="-1"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 5c-5 0-9.27 3.11-11 7 1.73 3.89 6 7 11 7s9.27-3.11 11-7c-1.73-3.89-6-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg></button>
+    </div>
+    <div class="actions">
+      <button type="button" class="primary" id="save"></button>
+      <button type="button" class="ghost" id="quit"></button>
+    </div>
+    <!-- main.mjs writes status / server errors here (English); shown translated in #msg -->
+    <div id="error" hidden></div>
+    <div class="msg" id="msg" aria-live="polite"></div>
+    <div class="note"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3zm4.7 7.3-5.6 5.6-2.8-2.8 1.1-1.1 1.7 1.7 4.5-4.5 1.1 1.1z"/></svg><span data-t="note"></span></div>
+  </main>
+<script>
+  const { ipcRenderer } = require("electron");
+  const T = {
+    fa: { lead: "برنامه‌ریزی می‌کند، کد می‌نویسد، تست می‌گیرد، تحویل می‌دهد",
+          f1: "روی پروژه‌های خود شما", f1s: "روی فایل‌های همین سیستم کار می‌کند، نه جای دیگر",
+          f2: "ترمینال و تست واقعی", f2s: "build و تست را اجرا می‌کند و تا سبز شدن اصلاح می‌کند",
+          f3: "مدل‌های اختصاصی سازمان", f3s: "بدون کلید یا تنظیم؛ همه‌چیز آماده است",
+          title: "ورود به NovaAgent", sub: "با نام کاربری و گذرواژه‌ی سازمانی خود وارد شوید.",
+          user: "نام کاربری یا ایمیل", pass: "گذرواژه", save: "ورود", quit: "بستن", lang: "English",
+          note: "اتصال رمزنگاری‌شده است و فقط فایل‌هایی که اجازه دهید در دسترس دستیار قرار می‌گیرد.",
+          empty: "نام کاربری و گذرواژه را وارد کنید.", busy: "در حال ورود…",
+          "invalid username or password": "نام کاربری یا گذرواژه نادرست است.",
+          "sign-in service unavailable": "سرویس ورود در دسترس نیست؛ کمی بعد دوباره تلاش کنید.",
+          "this account is disabled; contact your administrator": "این حساب غیرفعال شده است؛ با مدیر سیستم تماس بگیرید.",
+          network: "اتصال به سرور برقرار نشد. شبکه یا VPN را بررسی کنید." },
+    en: { lead: "Plans, writes code, runs the tests, ships",
+          f1: "On your own projects", f1s: "Works on the files on this computer, nowhere else",
+          f2: "Real terminal, real tests", f2s: "Runs build and tests and fixes until they pass",
+          f3: "Your organisation's models", f3s: "No keys, no setup: everything is ready",
+          title: "Sign in to NovaAgent", sub: "Use your organisation username and password.",
+          user: "Username or email", pass: "Password", save: "Sign in", quit: "Close", lang: "فارسی",
+          note: "The connection is encrypted; the assistant only sees the folders you allow.",
+          empty: "Enter your username and password.", busy: "Signing in…",
+          network: "Could not reach the server. Check your network or VPN." },
+  };
+  let lang = localStorage.getItem("nova-lang") || "fa";
+  const $ = (id) => document.getElementById(id);
+  const msg = $("msg"), save = $("save");
+  function apply() {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "fa" ? "rtl" : "ltr";
+    document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = T[lang][el.dataset.t]; });
+    save.textContent = T[lang].save; $("quit").textContent = T[lang].quit; $("lang").textContent = T[lang].lang;
+  }
+  function show(text, info) {
+    msg.className = "msg" + (info ? " info" : "");
+    msg.textContent = text;
+  }
+  // main.mjs reports through #error (English text) and re-enables #save on failure
+  new MutationObserver(() => {
+    const raw = $("error").textContent.trim();
+    if (!raw) return show("");
+    if (/^signing in/i.test(raw)) { save.innerHTML = '<span class="spinner"></span>' + T[lang].busy; return show(""); }
+    save.textContent = T[lang].save;
+    const known = T[lang][raw] || T.fa[raw] && T[lang][raw];
+    show(known || (/fetch|network|ECONN|ENOTFOUND|ERR_/i.test(raw) ? T[lang].network : raw));
+  }).observe($("error"), { childList: true, characterData: true, subtree: true });
+  new MutationObserver(() => { if (!save.disabled && save.querySelector(".spinner")) save.textContent = T[lang].save; })
+    .observe(save, { attributes: true, attributeFilter: ["disabled"] });
+  $("lang").onclick = () => { lang = lang === "fa" ? "en" : "fa"; try { localStorage.setItem("nova-lang", lang); } catch {} apply(); };
+  $("eye").onclick = () => { const p = $("password"); p.type = p.type === "password" ? "text" : "password"; };
+  $("quit").onclick = () => ipcRenderer.send("thin-login-prompt", { action: "quit" });
+  save.onclick = () => {
+    const u = $("username").value.trim(), p = $("password").value;
+    if (!u || !p) return show(T[lang].empty);
+    show("");
+    ipcRenderer.send("thin-login-prompt", { action: "save", username: u, password: p });
+  };
+  for (const id of ["username", "password"]) $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") save.click(); });
+  apply();
+</script>
+</body>
+</html>

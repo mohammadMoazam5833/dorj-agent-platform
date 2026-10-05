@@ -1,73 +1,80 @@
-// NovaAgent desktop app live e2e: launches the real Electron app (desktop/app), signs in through SSO
-// inside the app window, and checks the hardening (bundled CA only for *.isigpu.local, external links
-// leave the app, no Node in remote pages).
-// Needs: E2E_USER/E2E_PASS and a packaged build (desktop: npm run dist:linux) - the real artifact is
-// what gets tested (in CI: the installed .deb, NOVA_DESKTOP_BIN=/opt/NovaAgent/novaagent under xvfb-run).
+// NovaAgent desktop client, end to end as a customer uses it: the installed .deb (NovaAgent's own thin
+// client + overlay) starts, the sign-in window authenticates against realm nova, the app opens the
+// server UI, starts its Local Tools Sidecar + reverse tunnel, and the agent creates a file on *this*
+// machine's disk. Runs inside an Ubuntu container under Xvfb (see e2e/run-desktop.sh).
+// Needs: E2E_USER/E2E_PASS, NOVA_DESKTOP_BIN (default /opt/NovaAgent/novaagent-client).
 import { test, expect, _electron as electron } from '@playwright/test'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { homedir } from 'node:os'
 import path from 'node:path'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 
-const DESKTOP = path.resolve(__dirname, '../desktop')
-const RESOLVE = process.env.NOVA_HOST_RULES || 'MAP nova.isigpu.local 172.16.50.202, MAP platform.isigpu.local 172.16.50.202, MAP identity.isigpu.local 172.16.50.202'
-const userData = mkdtempSync(path.join(tmpdir(), 'nova-desktop-e2e-'))
-test.afterAll(() => rmSync(userData, { recursive: true, force: true }))
+const BIN = process.env.NOVA_DESKTOP_BIN || '/opt/NovaAgent/novaagent-client'
+const SHOTS = process.env.NOVA_SHOTS || '.'
+const PROOF = path.join(homedir(), 'nova_desktop_e2e.txt')
 
-test('desktop app: SSO sign-in in the window, real UI, hardened shell', async () => {
+test('desktop client: sign in, server UI, agent works on this PC', async () => {
+  test.setTimeout(420_000)
+  rmSync(PROOF, { force: true })
   const env = { ...process.env }
   for (const k of ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy']) delete env[k]
-  const app = await electron.launch({
-    executablePath: process.env.NOVA_DESKTOP_BIN || path.join(DESKTOP, 'dist/linux-unpacked/novaagent'),
-    args: ['--no-sandbox', '--disable-gpu', `--host-resolver-rules=${RESOLVE}`, `--user-data-dir=${userData}`],
-    env
-  })
+  let main = null
+  const app = await electron.launch({ executablePath: BIN, args: ['--no-sandbox', '--disable-gpu'], env })
   try {
-    const win = await app.firstWindow()
-    // OS store on this host does not trust the cluster CA: getting past TLS proves the bundled-CA check
-    const pw = win.locator('input[type="password"]:visible').first()
-    await pw.waitFor({ timeout: 60_000 })
-    expect(new URL(win.url()).hostname).toMatch(/\.isigpu\.local$/)
-    const form = win.locator('form', { has: pw })
-    await form.locator('input:visible:not([type="password"]):not([type="hidden"]):not([type="checkbox"])').first().fill(process.env.E2E_USER)
-    await pw.fill(process.env.E2E_PASS)
-    await win.waitForFunction(u => { const h = document.getElementById('username'); return !h || h.type !== 'hidden' || h.value.startsWith(u.split('@')[0] + '@') }, process.env.E2E_USER)
-    await pw.press('Enter')
-    await win.waitForURL(u => u.hostname === 'nova.isigpu.local' && !/\/(oauth2|dex)\//.test(u.pathname), { timeout: 60_000 })
-    await expect(win.locator('body[data-agent-server-ui]')).toBeAttached({ timeout: 30_000 })
+    // 1. sign-in window (redesigned login-prompt.html, same IPC contract); a wrong password is refused
+    const login = await app.firstWindow()
+    await login.locator('#username').waitFor({ timeout: 60_000 })
+    expect(await login.locator('html').getAttribute('dir')).toBe('rtl')
+    await login.screenshot({ path: path.join(SHOTS, 'nova-desktop-login.png') })
+    await login.locator('#username').fill(process.env.E2E_USER)
+    await login.locator('#password').fill('wrong-password')
+    await login.locator('#save').click()
+    await expect(login.locator('#msg')).toContainText('نادرست', { timeout: 30_000 })
+    await login.screenshot({ path: path.join(SHOTS, 'nova-desktop-login-error.png') })
+    await login.locator('#password').fill(process.env.E2E_PASS)
+    await login.locator('#save').click()
 
-    const me = await win.evaluate(async () => (await fetch('/v1/me')).json())
-    expect(me.email).toMatch(new RegExp('^' + process.env.E2E_USER.split('@')[0] + '@', 'i'))
-    expect(await win.evaluate(() => typeof require === 'undefined' && typeof process === 'undefined' && typeof window.nova === 'undefined')).toBe(true)
-    // the real UI renders and a chat round-trips through the agent (WebSocket via nova-control)
-    await expect(win.getByRole('heading', { name: "Let's Start Building!" })).toBeVisible({ timeout: 120_000 })
-    await win.locator('[contenteditable="true"]').first().click()
-    await win.keyboard.type('Do not use any tools. Reply with exactly this word and nothing else: NOVADESKPONG')
-    await win.keyboard.press('Enter')
-    await expect(win).toHaveURL(/\/conversations\//, { timeout: 60_000 })
-    await expect.poll(() => win.getByText('NOVADESKPONG', { exact: false }).count(), { timeout: 180_000, intervals: [2000] }).toBeGreaterThanOrEqual(2)
-    await win.screenshot({ path: process.env.NOVA_DESKTOP_SHOT || 'nova-desktop.png' })
-    const conv = win.url().split('/conversations/')[1].split(/[?#/]/)[0]
-    await win.evaluate(async c => { await fetch(`/api/conversations/${c}`, { method: 'DELETE' }) }, conv)
+    // 2. the server UI in the main window (company LLM pre-configured, no setup screens)
+    for (let i = 0; i < 120 && !main; i++) {
+      main = app.windows().find(w => w.url().startsWith('https://nova.isigpu.local'))
+      if (!main) await new Promise(r => setTimeout(r, 1000))
+    }
+    expect(main, 'main window on the company server').toBeTruthy()
+    await main.waitForLoadState('domcontentloaded')
+    await expect(main.locator('[contenteditable="true"]').first()).toBeVisible({ timeout: 180_000 })
+    await main.screenshot({ path: path.join(SHOTS, 'nova-desktop-main.png') })
+    const me = await main.evaluate(async () => (await fetch('/v1/me')).json())
+    expect(me.email).toMatch(/@/)
 
-    // main-process policy checks
-    const policy = await app.evaluate(async ({ session, app: a }) => {
-      const s = session.fromPartition('persist:nova')
-      const cookies = await s.cookies.get({ domain: 'nova.isigpu.local' })
-      return { cookies: cookies.length, version: a.getVersion(), name: a.getName() }
-    })
-    expect(policy.cookies).toBeGreaterThan(0)
-    expect(policy.version).toBe(require(path.join(DESKTOP, 'app/package.json')).version)
-
-    // a foreign https origin must not load in the app window (opened externally instead)
-    // neither a foreign site nor another isigpu.local product (Dorj) opens inside the app
-    await win.evaluate(() => { location.href = 'https://platform.isigpu.local/' })
-    await win.waitForTimeout(1500)
-    expect(new URL(win.url()).hostname).toBe('nova.isigpu.local')
-    await win.evaluate(() => { location.href = 'https://example.com/' })
-    await win.waitForTimeout(1500)
-    expect(new URL(win.url()).hostname).toBe('nova.isigpu.local')
-    expect(win.url()).not.toContain('example.com')
+    // 3. the agent works on this machine: a conversation in this PC's home folder writes a file here
+    const result = await main.evaluate(async ({ home }) => {
+      const key = window.__AGENT_CANVAS_SESSION_API_KEY__
+      const h = { 'Content-Type': 'application/json', 'X-Session-API-Key': key }
+      const j = async (r) => { const t = await r.text(); try { return JSON.parse(t) } catch { return { raw: t, status: r.status } } }
+      const st = await j(await fetch('/api/settings', { headers: { ...h, 'X-Expose-Secrets': 'encrypted' } }))
+      const conv = await j(await fetch('/api/conversations', { method: 'POST', headers: h, body: JSON.stringify({
+        workspace: { kind: 'LocalWorkspace', working_dir: home }, agent_settings: st.agent_settings, secrets_encrypted: true }) }))
+      if (!conv.id) return { status: 'start-failed', conv }
+      const sent = await fetch(`/api/conversations/${conv.id}/events`, { method: 'POST', headers: h, body: JSON.stringify({ role: 'user', run: true,
+        content: [{ type: 'text', text: 'Use the file editor to create the file nova_desktop_e2e.txt in the current directory containing exactly: pong. Do not run any other command. Then reply DONE.' }] }) })
+      if (!sent.ok) return { id: conv.id, status: 'send-failed', detail: await sent.text() }
+      let ran = false
+      for (let i = 0; i < 100; i++) {
+        const s = (await j(await fetch(`/api/conversations/${conv.id}`, { headers: h }))).execution_status
+        if (s === 'running') ran = true
+        if (['finished', 'error', 'stuck'].includes(s) || (ran && s === 'idle')) return { id: conv.id, status: s }
+        await new Promise(r => setTimeout(r, 3000))
+      }
+      return { id: conv.id, status: 'timeout' }
+    }, { home: homedir() })
+    expect(result.status, JSON.stringify(result)).toBe('finished')
+    expect(existsSync(PROOF), `${PROOF} must exist on the customer machine`).toBe(true)
+    expect(readFileSync(PROOF, 'utf8').trim()).toBe('pong')
   } finally {
+    if (main) {   // what the customer saw last (also on failure)
+      await main.screenshot({ path: path.join(SHOTS, 'nova-desktop-last.png') }).catch(() => {})
+      const text = await main.evaluate(() => document.body.innerText.slice(0, 2000)).catch(e => String(e))
+      console.log('[last main window]', main.url().replace(/t=[^&]+/, 't=***'), '\n', text)
+    }
     await app.close()
   }
 })

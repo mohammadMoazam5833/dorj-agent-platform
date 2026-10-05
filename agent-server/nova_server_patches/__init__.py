@@ -14,7 +14,10 @@ scripts/patches/conversation_{router,service}-custhome.patch did by editing site
 3. agent-server mkdirs (and git-inits) the conversation working_dir on its own host before
    starting. For a customer-PC path (e.g. /home/ali/project) that is not writable here and the
    start fails; when the workspace is bridged that server-side directory is irrelevant, so the
-   mkdir failure is ignored (Windows paths were silently created as relative dirs on the VM).
+   mkdir failure is ignored (Windows paths were silently created as relative dirs on the VM), and
+   the server-side "git init the workspace" step is skipped for it (the repo lives on the PC).
+   Server-side reads of such a path (project skills/agents discovery) treat PermissionError as
+   "not present".
    Likewise the terminal/glob/grep tool definitions refuse a working_dir that is not a directory
    *on the server*; for a bridged customer path that check is answered as "yes" (the terminal's
    commands run on the customer's PC through sidecar_bridge).
@@ -146,6 +149,32 @@ def _install() -> None:
         mkdir._nova_wrapped = True
         pathlib.Path.mkdir = mkdir
 
+    # Server-side reads under a customer path (project skills / agents / plugins discovery) must not
+    # crash when the same path exists on the server but is not readable (e.g. a customer's /root):
+    # for a bridged customer path a PermissionError means "not here".
+    def _guard(name, empty):
+        orig = getattr(pathlib.Path, name)
+        if getattr(orig, "_nova_wrapped", False):
+            return
+
+        @functools.wraps(orig)
+        def wrapped(self, *args, **kwargs):
+            try:
+                res = orig(self, *args, **kwargs)
+                return list(res) if name in ("iterdir", "glob", "rglob") else res
+            except PermissionError:
+                p = str(self)
+                if bridged() and (_WIN_PATH.match(p) or under_roots(p, customer_roots())):
+                    return empty()
+                raise
+
+        wrapped._nova_wrapped = True
+        setattr(pathlib.Path, name, wrapped)
+
+    for _name, _empty in (("exists", lambda: False), ("is_dir", lambda: False), ("is_file", lambda: False),
+                          ("iterdir", lambda: iter(())), ("glob", lambda: iter(())), ("rglob", lambda: iter(()))):
+        _guard(_name, _empty)
+
     import importlib
     import os as _os
     import types
@@ -167,6 +196,21 @@ def _install() -> None:
 
         def __getattr__(self, name):
             return getattr(_os, name)
+
+    from openhands.agent_server import event_service as _es
+
+    orig_git = _es.EventService.__dict__.get("_ensure_workspace_is_git_repo")
+    if isinstance(orig_git, staticmethod) and not getattr(orig_git.__func__, "_nova_wrapped", False):
+        inner = orig_git.__func__
+
+        @functools.wraps(inner)
+        def ensure_git(working_dir, *args, **kwargs):
+            if customer_dir(working_dir):
+                return None
+            return inner(working_dir, *args, **kwargs)
+
+        ensure_git._nova_wrapped = True
+        _es.EventService._ensure_workspace_is_git_repo = staticmethod(ensure_git)
 
     for mod_name in ("openhands.tools.terminal.definition", "openhands.tools.glob.definition",
                      "openhands.tools.grep.definition"):
