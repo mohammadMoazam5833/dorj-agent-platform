@@ -66,6 +66,15 @@ test('desktop client: sign in, server UI, agent works on this PC', async () => {
       }
       return { id: conv.id, status: 'timeout' }
     }, { home: homedir() })
+    // the agent was told it works on *this* machine (OS/home/shell/runtimes from the sidecar hello)
+    const info = await main.evaluate(async (id) => {
+      const h = { 'X-Session-API-Key': window.__AGENT_CANVAS_SESSION_API_KEY__ }
+      return JSON.stringify(await (await fetch(`/api/conversations/${id}`, { headers: h })).json())
+    }, result.id)
+    const osName = readFileSync('/etc/os-release', 'utf8').match(/^PRETTY_NAME="?(.+?)"?$/m)[1]
+    expect(info).toContain('<USER_MACHINE>')
+    expect(info).toContain(osName)
+    expect(info).toContain(homedir())
     expect(result.status, JSON.stringify(result)).toBe('finished')
     expect(existsSync(PROOF), `${PROOF} must exist on the customer machine`).toBe(true)
     expect(readFileSync(PROOF, 'utf8').trim()).toBe('pong')

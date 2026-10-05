@@ -24,6 +24,9 @@ scripts/patches/conversation_{router,service}-custhome.patch did by editing site
 4. The NovaAgent UI's company-managed LLM profile points at the public ``https://<host>/llmapi``
    (what the customer's app can reach). Inside the cluster the same calls go straight to the
    internal LiteLLM (NOVA_LLM_PUBLIC_BASE -> NOVA_LLM_INTERNAL_BASE), same per-user key.
+6. The agent is told which machine it really works on: the customer's sidecar hello (NovaAgent
+   client overlay) reports OS, home, shell and installed runtimes; it is appended to the agent's
+   system prompt (<USER_MACHINE>) for every new conversation.
 5. Our models do not all accept every reasoning_effort (qwen3 on vLLM rejects "high", the SDK
    default). NOVA_REASONING_EFFORT_MAP="qwen3:high=medium,..." rewrites the effort for calls to our
    LLM gateway only.
@@ -40,29 +43,63 @@ import time
 logger = logging.getLogger("nova_server_patches")
 _WIN_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 _ROOTS_TTL_S = 30.0
-_roots_cache: tuple[float, list[str]] = (0.0, [])
+_hello_cache: tuple[float, dict] = (0.0, {})
 
 
-def customer_roots() -> list[str]:
-    """Roots announced by the customer's sidecar (cached briefly); [] when not connected/configured."""
-    global _roots_cache
+def customer_hello() -> dict:
+    """The customer's sidecar hello (roots + the machine's description), cached briefly;
+    {} when the customer's app is not connected / no workspace bridge is configured."""
+    global _hello_cache
     now = time.monotonic()
-    if now - _roots_cache[0] < _ROOTS_TTL_S and _roots_cache[1]:
-        return _roots_cache[1]
-    roots: list[str] = []
+    if now - _hello_cache[0] < _ROOTS_TTL_S and _hello_cache[1]:
+        return _hello_cache[1]
+    hello: dict = {}
     try:
         from sidecar_bridge.client import client_from_env
 
         cli = client_from_env()
         if cli is not None:
-            hello = cli.hello()
-            raw = hello.get("roots") if isinstance(hello, dict) else None
-            if isinstance(raw, list):
-                roots = [str(r).rstrip("/\\") for r in raw if str(r).strip()]
+            res = cli.hello()
+            hello = res if isinstance(res, dict) else {}
     except Exception:  # customer offline: keep behaviour unchanged, the tools will report it
-        logger.debug("customer roots unavailable", exc_info=True)
-    _roots_cache = (now, roots)
-    return roots
+        logger.debug("customer hello unavailable", exc_info=True)
+    _hello_cache = (now, hello)
+    return hello
+
+
+def customer_roots() -> list[str]:
+    raw = customer_hello().get("roots")
+    return [str(r).rstrip("/\\") for r in raw if str(r).strip()] if isinstance(raw, list) else []
+
+
+def customer_system_prompt() -> str:
+    """Tell the agent which machine it is really working on (the customer's, through the bridge)."""
+    h = customer_hello()
+    sysinfo = h.get("system") if isinstance(h.get("system"), dict) else {}
+    roots = customer_roots()
+    if not sysinfo and not roots:
+        return ""
+    plat = {"win32": "Windows", "darwin": "macOS", "linux": "Linux"}.get(sysinfo.get("platform", ""), sysinfo.get("platform", "unknown"))
+    shell = str(sysinfo.get("shell") or "")
+    shell_kind = ("PowerShell" if "powershell" in shell.lower() else "Git Bash" if "bash" in shell.lower() and plat == "Windows"
+                  else shell or "the default shell")
+    runtimes = sysinfo.get("runtimes") if isinstance(sysinfo.get("runtimes"), dict) else {}
+    lines = [
+        "<USER_MACHINE>",
+        "All your file and terminal tools run on the user's own computer (through the NovaAgent app), "
+        "not on a server. Work with this machine's OS, paths, shell and installed tools:",
+        f"- OS: {plat} - {sysinfo.get('os') or ''} (release {sysinfo.get('release') or '?'}, {sysinfo.get('arch') or '?'})",
+        f"- User: {sysinfo.get('user') or '?'} on host {sysinfo.get('hostname') or '?'}; home: {sysinfo.get('home') or '?'}",
+        f"- Terminal commands run in: {shell_kind} ({shell})" if shell else "",
+        "- Folders you may use: " + (", ".join(roots) if roots else "(none reported)"),
+        "- Installed runtimes: " + (", ".join(f"{k} {v}" for k, v in runtimes.items()) if runtimes
+                                    else "none detected - ask before installing anything"),
+    ]
+    if plat == "Windows":
+        lines.append("- Use Windows paths (C:\\...) and commands valid in that shell; there is no Linux userland unless Git Bash/WSL is listed.")
+    lines.append("Never install system-wide software or change system settings on this machine without the user's explicit consent.")
+    lines.append("</USER_MACHINE>")
+    return "\n".join(l for l in lines if l)
 
 
 def _norm(p: str) -> str:
@@ -81,6 +118,22 @@ def bridged() -> bool:
         return client_from_env() is not None
     except Exception:
         return False
+
+
+def _with_machine_context(request):
+    """Append the customer's machine description to the agent's system prompt."""
+    text = customer_system_prompt()
+    agent = getattr(request, "agent", None)
+    if not text or agent is None or not hasattr(agent, "agent_context"):
+        return request
+    from openhands.sdk.context.agent_context import AgentContext
+
+    ctx = agent.agent_context or AgentContext()
+    cur = ctx.system_message_suffix or ""
+    if "<USER_MACHINE>" in cur:
+        return request
+    ctx = ctx.model_copy(update={"system_message_suffix": (cur + "\n\n" if cur else "") + text})
+    return request.model_copy(update={"agent": agent.model_copy(update={"agent_context": ctx})})
 
 
 def _remap_workspace(request):
@@ -110,7 +163,7 @@ def _install() -> None:
     if not getattr(original_start, "_nova_wrapped", False):
         @functools.wraps(original_start)
         async def start_conversation(self, request, *args, **kwargs):
-            return await original_start(self, _remap_workspace(request), *args, **kwargs)
+            return await original_start(self, _with_machine_context(_remap_workspace(request)), *args, **kwargs)
 
         start_conversation._nova_wrapped = True
         cs.ConversationService.start_conversation = start_conversation

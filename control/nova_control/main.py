@@ -353,6 +353,9 @@ async def spa(path: str, request: Request):
     if not index.exists():
         return JSONResponse({"error": "UI bundle not installed"}, status_code=503)
     ident = tenants.identity_of(c)
+    # serve the UI only once the user's agent-server answers: the app shows its loading screen meanwhile;
+    # a UI that boots while the workspace is still cold-starting opens on "Manage backends" instead
+    await workspaces.ensure_ready(ident)
     llm_key = await asyncio.to_thread(workspaces.llm_key, ident)
     if llm_key is None:       # first launch: the workspace (and its LLM key) is created right now
         await workspaces.ensure_ready(ident)

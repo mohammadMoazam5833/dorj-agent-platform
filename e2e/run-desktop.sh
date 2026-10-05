@@ -7,7 +7,9 @@ cd "$(dirname "$0")"
 SHOTS=$(realpath "${1:-.}")
 DEB=$(ls ../desktop/dist/NovaAgent-*-amd64.deb | tail -1)
 IP=${NOVA_INGRESS_IP:-172.16.50.202}
-docker run --rm --shm-size=2g -e HTTPS_PROXY -e HTTP_PROXY -e E2E_USER -e E2E_PASS -e HOST_UID="$(id -u):$(id -g)" \
+# /dev/shm read-only: emulates guests where Chromium cannot create shared memory there (VMware Ubuntu
+# report 2026-10-05) - the packaged app must start anyway (--disable-dev-shm-usage)
+docker run --rm --tmpfs /dev/shm:ro,size=1m -e HTTPS_PROXY -e HTTP_PROXY -e E2E_USER -e E2E_PASS -e HOST_UID="$(id -u):$(id -g)" \
   --add-host "nova.isigpu.local:$IP" --add-host "identity.isigpu.local:$IP" \
   -v /workdir:/workdir -v "$SHOTS:/shots" \
   -e NOVA_SHOTS=/shots -w "$PWD" 172.16.50.89:8085/electronuserland/builder:wine bash -c '

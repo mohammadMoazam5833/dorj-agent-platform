@@ -15,6 +15,12 @@ upstream change fails the build loudly instead of silently shipping an unpatched
   4. Application menu with Sign out / Reload / Quit (fa + en).
   5. The redesigned sign-in window (login-prompt.html is replaced; it keeps the same IPC contract).
   6. Windows NSIS installer target for the thin client.
+  7. Linux: the launcher wrapper is actually created for the thin client (upstream looked for the
+     wrong binary name), and --disable-dev-shm-usage is on every launch path (launcher wrapper, desktop/AppImage
+     executableArgs, and in-process). Some VMware Ubuntu guests abort at start with
+     "Creating shared memory in /dev/shm failed: No such process (3)" even though /dev/shm is a
+     1777 tmpfs (customer report 2026-10-05, 1.6.3 -> 1.6.5); Chromium then keeps shared memory
+     under the temp directory instead.
 
 Usage: overlay.py <staged NovaAgent dir> <overlay dir (this desktop/ folder)>
 """
@@ -151,6 +157,110 @@ function installNovaMenu() {
 ]
 edit("electron/main.mjs", main_edits)
 
+main_edits_linux = [
+    (  # 7: in-process too (renderer/GPU children inherit it)
+        '  app.commandLine.appendSwitch("no-sandbox");\n',
+        '  app.commandLine.appendSwitch("no-sandbox");\n  app.commandLine.appendSwitch("disable-dev-shm-usage");\n',
+    ),
+]
+edit("electron/main.mjs", main_edits_linux)
+edit("electron-builder.config.mjs", [
+    (  # 7a: the thin client's binary is "novaagent-client" (extraMetadata name), which upstream's
+       # candidate list misses - without this the .deb ships NO launcher wrapper at all and
+       # `novaagent-client` from a terminal starts with none of the Linux flags
+        '  const candidates = [\n    join(out, productFilename),',
+        '  const candidates = [\n    join(out, context.packager.executableName),\n    join(out, productFilename),',
+    ),
+    (  # 7b: /usr/bin/novaagent-client is a symlink (update-alternatives); resolve it, or the
+       # wrapper looks for /usr/bin/novaagent-client.bin and the app never starts from a terminal
+        'DIR="$(cd "$(dirname "$0")" && pwd)"',
+        'DIR="$(dirname "$(readlink -f "$0")")"',
+    ),
+    (  # 7: the launcher wrapper every Linux entry point goes through (/usr/bin, .desktop, AppImage)
+        '  --disable-software-rasterizer \\\\\n  "$@"',
+        '  --disable-software-rasterizer \\\\\n  --disable-dev-shm-usage \\\\\n  "$@"',
+    ),
+])
+
+# 8: the customer's machine, as the agent must see it. The sidecar's hello also reports OS, home,
+#    the shell its terminal commands run in and the runtimes installed there; the agent-server
+#    (nova_server_patches) puts that into the agent's system prompt, so it works with *this*
+#    machine's paths, shell and tools - not the Linux server it is hosted on.
+edit("scripts/local-tools-sidecar/handlers.mjs", [
+    (
+        '          roots: ctx.roots,\n          host: ctx.host,\n          port: ctx.port,\n        });',
+        '          roots: ctx.roots,\n          host: ctx.host,\n          port: ctx.port,\n          system: describeSystem(),\n        });',
+    ),
+])
+with open(stage / "scripts/local-tools-sidecar/handlers.mjs", "a", encoding="utf-8") as f:
+    f.write(r'''
+
+// ── NovaAgent overlay: describe the customer's machine for the agent (cached) ──────────────────
+import * as novaOs from "node:os";
+import { execFileSync as novaExecFileSync } from "node:child_process";   // readFileSync/existsSync: imported above
+
+let novaSystemCache = null;
+
+function novaVersionOf(cmd, args) {
+  try {
+    const out = novaExecFileSync(cmd, args, { encoding: "utf8", timeout: 4000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    return String(out).trim().split(/\r?\n/)[0].slice(0, 80) || null;
+  } catch (err) {
+    const msg = err && (err.stderr || err.stdout);   // java/python2 print versions on stderr
+    return msg ? String(msg).trim().split(/\r?\n/)[0].slice(0, 80) : null;
+  }
+}
+
+function novaOsName() {
+  if (process.platform === "linux") {
+    try {
+      const rel = readFileSync("/etc/os-release", "utf8");
+      const m = /^PRETTY_NAME="?(.+?)"?$/m.exec(rel);
+      if (m) return m[1];
+    } catch { /* ignore */ }
+  }
+  return (typeof novaOs.version === "function" ? novaOs.version() : "") || novaOs.type();
+}
+
+export function describeSystem() {
+  if (novaSystemCache) return novaSystemCache;
+  const win = process.platform === "win32";
+  const shell = win
+    ? (WIN_GIT_BASH_CANDIDATES.find((c) => { try { return c && existsSync(c); } catch { return false; } }) || "powershell.exe")
+    : (process.env.SHELL || "/bin/bash");
+  const probes = {
+    python: win ? ["python", ["--version"]] : ["python3", ["--version"]],
+    node: ["node", ["--version"]],
+    npm: [win ? "npm.cmd" : "npm", ["--version"]],
+    git: ["git", ["--version"]],
+    java: ["java", ["-version"]],
+    go: ["go", ["version"]],
+    dotnet: [win ? "dotnet.exe" : "dotnet", ["--version"]],
+    docker: ["docker", ["--version"]],
+  };
+  const runtimes = {};
+  for (const [name, [cmd, args]] of Object.entries(probes)) {
+    const v = novaVersionOf(cmd, args);
+    if (v) runtimes[name] = v;
+  }
+  let user = "";
+  try { user = novaOs.userInfo().username; } catch { /* ignore */ }
+  novaSystemCache = {
+    platform: process.platform,              // win32 | linux | darwin
+    os: novaOsName(),
+    release: novaOs.release(),
+    arch: process.arch,
+    hostname: novaOs.hostname(),
+    user,
+    home: novaOs.homedir(),
+    shell,
+    path_separator: win ? "\\" : "/",
+    runtimes,
+  };
+  return novaSystemCache;
+}
+''')
+
 shutil.copy(overlay / "login-prompt.html", stage / "electron/login-prompt.html")
 shutil.copy(overlay / "org-root-ca.crt", stage / "electron/org-root-ca.crt")
 for f in ("vazirmatn-400.woff2", "vazirmatn-600.woff2"):
@@ -165,4 +275,10 @@ edit("electron-builder.thin.config.mjs", [
     ('    artifactName: "NovaAgent-Client-Setup-${version}.${ext}",', '    artifactName: "NovaAgent-Setup-${version}-x64.${ext}",'),
     ('    artifactName: "NovaAgent-Client-${version}-${arch}.${ext}",\n  },\n\n  deb:', '    artifactName: "NovaAgent-${version}-${arch}.${ext}",\n  },\n\n  deb:'),
 ])
+thin = (stage / "electron-builder.thin.config.mjs").read_text(encoding="utf-8")
+n = thin.count('      "--disable-gpu",\n    ],')
+if n != 2:
+    sys.exit(f"overlay: expected 2 Linux executableArgs blocks in the thin config, found {n}")
+(stage / "electron-builder.thin.config.mjs").write_text(
+    thin.replace('      "--disable-gpu",\n    ],', '      "--disable-gpu",\n      "--disable-dev-shm-usage",\n    ],'), encoding="utf-8")
 print("overlay applied")

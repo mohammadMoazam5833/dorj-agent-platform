@@ -16,8 +16,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 src, out, server = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3].rstrip("/")
-ver = json.loads((src / "package.json").read_text())["version"]
 dist = ROOT / "desktop/dist"
+ver = (dist / "VERSION").read_text().strip()          # written by desktop/build-client.sh
 files = {"exe": f"NovaAgent-Setup-{ver}-x64.exe", "deb": f"NovaAgent-{ver}-amd64.deb",
          "appimage": f"NovaAgent-{ver}-x86_64.AppImage"}
 out.mkdir(parents=True, exist_ok=True)
@@ -47,7 +47,7 @@ def sub(pattern, repl, *, required=True, count=0):
         sys.exit(f"download page: pattern not found: {pattern}")
 
 
-ver_re = r"\d+\.\d+\.\d+"
+ver_re = r"\d+\.\d+\.\d+(?:[-+]nova\.\d+)?"
 sub(rf"/nova/NovaAgent-Client-{ver_re}-Setup\.exe", files["exe"])
 sub(rf"/nova/NovaAgent-Client-{ver_re}-amd64\.deb", files["deb"])
 sub(rf"/nova/NovaAgent-Client-{ver_re}-x86_64\.AppImage", files["appimage"])
