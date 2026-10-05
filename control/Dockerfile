@@ -1,5 +1,5 @@
-# nova-control: NovaAgent control plane (+ the NovaAgent web build copied in by the build script)
-FROM python:3.12-slim
+# nova-control: NovaAgent server edge (+ the NovaAgent UI bundle and admin page copied in by script 140)
+FROM 172.16.50.89:5000/python:3.12-slim
 ARG PIP_INDEX_URL
 ARG PIP_TRUSTED_HOST
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
@@ -8,6 +8,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir ${PIP_INDEX_URL:+--index-url "$PIP_INDEX_URL"} ${PIP_TRUSTED_HOST:+--trusted-host "$PIP_TRUSTED_HOST"} -r requirements.txt
 COPY nova_control ./nova_control
 COPY web /srv/nova-web
+# NovaAgent scripts/admin/nova-admin.mjs (its panel page is served by nova_control/adminpage.py)
+COPY admin-src /srv/nova-admin
 RUN useradd -u 10002 -m nova
 USER 10002
 EXPOSE 8080 9090

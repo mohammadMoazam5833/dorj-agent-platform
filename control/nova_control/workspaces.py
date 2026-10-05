@@ -319,6 +319,17 @@ async def seed_llm_settings(ident: Identity, model: str | None = None) -> None:
         WS_EVENTS.labels("seed_failed").inc()
 
 
+async def restart(ident: Identity) -> None:
+    await sync_tenant_token(ident)
+    _, apps = _apis()
+    want = _deployment(ident)
+    want.spec.template.metadata.annotations["kubectl.kubernetes.io/restartedAt"] = datetime.now(timezone.utc).isoformat()
+    body = {"spec": {"template": client.ApiClient().sanitize_for_serialization(want.spec.template)}}
+    await asyncio.to_thread(apps.patch_namespaced_deployment, name_for(ident.slug), settings.workspace_namespace, body)
+    _drift_checked.pop(ident.slug, None)
+    WS_EVENTS.labels("restarted").inc()
+
+
 async def stop(ident: Identity) -> None:
     await _scale(ident.slug, 0)
     WS_EVENTS.labels("stopped").inc()

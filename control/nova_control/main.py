@@ -6,6 +6,7 @@ Routes
   /llmapi/*             company LLM for the app's managed profile -> LiteLLM (user's own virtual key)
   /customer-workspace   reverse-workspace tunnel from the customer's PC -> gateway (WebSocket)
   /v1/*                 small JSON API (me, workspace, models, usage) for the CLI / admin
+  /admin, /admin/api/*  NovaAgent's admin panel (realm-nova users in group nova-admins)
   /internal/customers   gateway registry (shared bearer, never via ingress)
   /healthz /readyz      probes;  :9090/metrics  Prometheus (separate port)
   everything else       NovaAgent UI bundle for the desktop app; no token -> /download/
@@ -28,7 +29,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from prometheus_client import start_http_server
 from starlette.background import BackgroundTask
 
-from . import __version__, auth, llmkeys, tenants, workspaces
+from . import __version__, admin, auth, llmkeys, tenants, workspaces
 from .config import settings
 from .auth import current_identity
 from .identity import Identity
@@ -39,6 +40,7 @@ setup_logging()
 log = logging.getLogger("nova.control")
 app = FastAPI(title="nova-control", version=__version__, docs_url=None, redoc_url=None, openapi_url="/v1/openapi.json")
 setup_tracing(app)
+app.include_router(admin.router)     # /admin: NovaAgent's admin panel (before the SPA catch-all)
 
 HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers",
               "transfer-encoding", "upgrade", "host", "content-length"}

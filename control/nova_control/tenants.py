@@ -96,20 +96,23 @@ def by_name(name: str) -> dict | None:
     return next((c for c in all_customers() if c.get("name") == name), None)
 
 
-def ensure_for(email: str, display_name: str = "", groups: tuple = ()) -> dict:
-    """The user's registry entry, created on first sign-in (token minted then)."""
+def ensure_for(email: str, display_name: str = "", groups: tuple | None = None) -> dict:
+    """The user's registry entry, created on first sign-in (token minted then). ``groups=None``
+    (admin pre-provisioning) leaves existing group membership untouched."""
     email = email.strip().lower()
     name = slug_for(email)
     cur = by_name(name)
-    if cur and cur.get("email") == email and set(cur.get("groups", [])) == set(groups):
+    if cur and cur.get("email") == email and (groups is None or set(cur.get("groups", [])) == set(groups)):
         return cur
 
     def mutate(customers):
         for c in customers:
             if c.get("name") == name:
-                c.update(email=email, groups=list(groups), display_name=display_name or c.get("display_name", ""))
+                c.update(email=email, display_name=display_name or c.get("display_name", ""))
+                if groups is not None:
+                    c["groups"] = list(groups)
                 return customers
-        customers.append({"name": name, "email": email, "display_name": display_name, "groups": list(groups),
+        customers.append({"name": name, "email": email, "display_name": display_name, "groups": list(groups or ()),
                           "token": secrets.token_hex(24), "roots": [], "created": int(time.time()), "disabled": False})
         return customers
 
