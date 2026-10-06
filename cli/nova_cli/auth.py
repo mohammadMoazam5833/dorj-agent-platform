@@ -56,11 +56,33 @@ def load() -> dict:
         return {}
 
 
-def logout() -> None:
+def _forget_local_credential() -> None:
     try:
         CRED_FILE.unlink()
     except FileNotFoundError:
         pass
+
+
+def logout() -> None:
+    """Forget the local CLI credential and ask the server to revoke it everywhere."""
+    creds = load()
+    if not (creds.get("server") and creds.get("token")):
+        _forget_local_credential()
+        return
+
+    c, ext = client_for(creds["server"], creds["token"])
+    try:
+        with c:
+            r = c.post("/api/auth/logout", extensions=ext)
+    except httpx.HTTPError as e:
+        _forget_local_credential()
+        raise AuthError("server-side sign-out failed: connection error") from e
+
+    _forget_local_credential()
+    # A stale/expired token is already useless, so treat 401 as signed out.
+    if r.status_code not in (200, 401):
+        body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        raise AuthError(body.get("error") or f"server-side sign-out failed (HTTP {r.status_code})")
 
 
 def login(server: str, username: str, password: str) -> dict:

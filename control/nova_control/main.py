@@ -2,6 +2,7 @@
 
 Routes
   POST /api/auth/login  desktop-client sign-in (Keycloak realm nova) -> tenant token
+  POST /api/auth/logout revoke the caller tenant token (rotates it) and clear nova_t
   /api/*, /sockets/*    the caller's own agent-server pod (HTTP + WebSocket), chosen by tenant token
   /llmapi/*             company LLM for the app's managed profile -> LiteLLM (user's own virtual key)
   /customer-workspace   reverse-workspace tunnel from the customer's PC -> gateway (WebSocket)
@@ -162,6 +163,32 @@ async def _prewarm(ident: Identity) -> None:
         await workspaces.ensure_ready(ident)
     except Exception:
         log.exception("workspace prewarm failed", extra={"user": ident.email})
+
+
+async def _propagate_token_rotation(ident: Identity) -> None:
+    """Put the rotated tenant token into the workspace Secret and restart its agent-server.
+    Restarting is intentional: the old pod process still has the old token in its environment."""
+    try:
+        await workspaces.restart(ident)
+    except Exception:
+        # A workspace may not exist yet (for example, login was rejected before prewarm finished);
+        # revocation at the control-plane registry is still effective.
+        log.exception("workspace token rotation skipped", extra={"user": ident.email, "event": "token_rotation_failed"})
+
+
+@app.post("/api/auth/logout")
+async def logout(ident: Identity = Depends(current_identity)):
+    """Revoke the caller's tenant token and clear the browser/WebView cookie.
+
+    This is deliberately token-based rather than cookie-only, so a desktop app or CLI token is
+    revoked everywhere. New sessions receive a different token on their next login."""
+    tenants.rotate_token(ident.slug)
+    asyncio.create_task(_propagate_token_rotation(ident))
+    LOGINS.labels("logout").inc()
+    log.info("logout ok", extra={"event": "logout", "user": ident.email})
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(auth.COOKIE, path="/", httponly=True, secure=True, samesite="lax")
+    return resp
 
 
 @app.get("/internal/customers")
