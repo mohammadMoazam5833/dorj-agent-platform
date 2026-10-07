@@ -1,8 +1,8 @@
 # T2 Report — Dorj Agent rebrand
 
 - Date: 2026-10-07
-- Status: **CHECKPOINT 1 APPROVED — CTO fixes applied; proceeding to items 3–11 (no deploy yet)**
-- Scope completed: item 1 (desktop icon) and item 2 (login prompt + loading)
+- Status: **READY — T2 checkpoint 2; items 1–11 complete; versions prepared; no deploy/tag/push**
+- Scope completed: items 1–11 (T2)
 - Rule compliance: no Keycloak/theme redeploy, no Keycloak restart, no GLM/vLLM restart, no PVC/data deletion, no git push, no deployment, no tag.
 - `identity.spec.js` was not changed in this checkpoint.
 
@@ -71,22 +71,6 @@
   - Loading screen now shows only the Dorj wordmark (no duplicate D-mark); vertical spacing and
     collapsed splash height reduced.
   - Desktop icons regenerated without the thin cream/gold border, using the navy rounded square.
-
-## Remaining T2 items
-
-Items 3–11 are intentionally not started until the CTO reviews checkpoint 1.
-
-- Item 3: web UI bundle
-- Item 4: admin UI
-- Item 5: download page
-- Item 6: agent identity + e2e
-- Item 7: Keycloak realm display/theme
-- Item 8: CLI name/alias
-- Item 9: Grafana title
-- Item 10: e2e brand assertions/no-old-brand scan
-- Item 11: docs
-
-No `NOVA_CLIENT_REV`, control, agent-server, or download revision bumps were made because this checkpoint did not build or deploy.
 
 ## Item 3 — Web UI bundle
 
@@ -207,3 +191,70 @@ No `NOVA_CLIENT_REV`, control, agent-server, or download revision bumps were mad
   - Dashboard UID remains `nova-agent`, so existing links and provisioning behavior are unchanged.
 - Verification:
   - Parsed the JSON and asserted title/UID and panel titles.
+
+## Item 10 — E2E brand checks
+
+- Status: **DONE (item-local/static verification; full e2e intentionally not run)**
+- Commit: `0d4a019` — `test(e2e): assert Dorj Agent branding`
+- Files:
+  - `e2e/brand.spec.js`
+  - `e2e/download.spec.js`
+  - `e2e/server.spec.js`
+  - `e2e/admin.spec.js`
+  - `e2e/desktop.spec.js`
+  - `e2e/wayland.spec.js`
+  - `e2e/playwright.config.js`
+  - `e2e/load30.sh`
+  - `e2e/run-desktop.sh`
+  - `e2e/run-wayland.sh`
+- Implementation:
+  - Added `brand.spec.js` for customer-visible brand checks.
+  - It verifies unauthenticated `/` lands on `/download/`, then checks the direct download page,
+    `/admin` login, and the authenticated UI bundle loaded with `?t=<token>`.
+  - For each page it checks `document.title` and `document.body.innerText` for `Dorj Agent` /
+    «دستیار دُرج» and rejects visible `NovaAgent` / `OpenHands`.
+  - The UI-brand test signs in only through `/api/auth/login` with `E2E_USER` / `E2E_PASS`; it does
+    not print or persist credentials.
+  - `download.spec.js` now requires `Dorj-Agent-Client-*` for the primary installer and checks the
+    download title/visible text without old branding.
+  - Desktop specs default to `/usr/bin/dorj-agent-client`, while the runner scripts retain explicit
+    legacy-installer fallbacks for backward compatibility with previously installed clients.
+- Verification:
+  - `node --check` on all changed JavaScript specs.
+  - `bash -n` on changed shell e2e helpers.
+  - `git diff --check` clean.
+  - Evidence: `tasks/T2-evidence/t2-item10-static-checks.txt`
+  - Full e2e was intentionally not run before deployment, per checkpoint-2 instructions.
+
+## Item 11 — Docs and prepared versions
+
+- Status: **DONE (docs/version preparation only; no deploy)**
+- Commits:
+  - nova-platform: `99ac89c` — `docs: establish Dorj Agent product identity`
+  - k8s-deploy: `d024126` — `build(nova): prepare Dorj Agent release versions`
+  - k8s-deploy: `044c631` — `docs(runbook): document Dorj Agent product identity`
+- Files:
+  - `README.md`
+  - `HANDOFF.md`
+  - `/workdir/k8s-deploy/RUNBOOK.md`
+  - `/workdir/k8s-deploy/config.env.example`
+  - `/workdir/k8s-deploy/config.env` (working tree only; this local file is not tracked)
+- Documentation:
+  - Product name is now **Dorj Agent** / «دستیار دُرج».
+  - README and HANDOFF identify the desktop/web product, CLI alias `dorj-agent`, and compatibility
+    with the existing `nova` command.
+  - HANDOFF records the prepared versions and the outstanding deployment/e2e work.
+  - RUNBOOK §263 records the customer-facing identity and unchanged internal identifiers.
+- Prepared versions (not deployed):
+  - `NOVA_CLIENT_REV="2"` → client `1.6.6+nova.2`
+  - `NOVA_CONTROL_TAG="0.5.0"`
+  - `NOVA_AGENT_SERVER_TAG="1.38.0-nova12"`
+  - `NOVA_DOWNLOADS_REV="2"`
+
+## Final readiness
+
+- Items 1–11 are complete.
+- All T2 commits are local; there was **no deploy, no tag, and no git push**.
+- Full post-deploy e2e has **not** run yet.
+- The deployment prerequisite remains: check `etcdctl endpoint status` before script `140`.
+- This is the requested **T2 checkpoint 2** state.
