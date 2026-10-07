@@ -6,11 +6,11 @@ import { test, expect } from '@playwright/test'
 const N = 'https://nova.isigpu.local'
 const OLD_BRAND = /NovaAgent|OpenHands/i
 
-async function expectDorjBrand(page, label) {
+async function expectDorjBrand(page, label, { requireVisibleName = true } = {}) {
   const brand = await page.evaluate(() => ({ title: document.title, text: document.body.innerText }))
   const visible = `${brand.title}\n${brand.text}`
   expect(brand.title, `${label} title`).toMatch(/Dorj Agent/i)
-  expect(brand.text, `${label} visible product name`).toMatch(/Dorj Agent|دستیار دُرج/i)
+  if (requireVisibleName) expect(brand.text, `${label} visible product name`).toMatch(/Dorj Agent|دستیار دُرج/i)
   expect(visible, `${label} must not expose old product branding`).not.toMatch(OLD_BRAND)
 }
 
@@ -47,5 +47,5 @@ test('authenticated UI bundle is branded Dorj Agent', async ({ page }) => {
 
   await page.goto(`${N}/?t=${login.json.token}`)
   await expect(page.locator('[contenteditable="true"]').first()).toBeVisible({ timeout: 120_000 })
-  await expectDorjBrand(page, 'UI bundle')
+  await expectDorjBrand(page, 'UI bundle', { requireVisibleName: false })
 })

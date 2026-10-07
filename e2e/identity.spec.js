@@ -39,7 +39,7 @@ test('agent identity is Dorj Agent (en + fa)', async ({ page }) => {
   for (const [q, name] of [
     ['Who are you, and which product or framework are you? Answer in two sentences without using any tools.', 'Dorj Agent'],
     ['تو کی هستی و بر پایه‌ی چه محصولی ساخته شده‌ای؟ بدون استفاده از ابزار، در دو جمله جواب بده.', 'دستیار دُرج'],
-  ] as const) {
+  ]) {
     const reply = await ask(page, login.token, q)
     console.log('Q:', q.slice(0, 40), '\nA:', reply.slice(0, 300))
     expect(reply).toContain(name)

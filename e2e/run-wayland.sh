@@ -12,15 +12,22 @@ fi
 DEB=$(realpath "${1:-$DEFAULT_DEB}")
 SHOTS=$(realpath "${2:-.}")
 IP=${NOVA_INGRESS_IP:-172.16.50.202}
-docker run --rm --tmpfs /dev/shm:ro,size=1m -e HTTPS_PROXY -e HTTP_PROXY -e E2E_USER -e E2E_PASS \
+docker run --rm --network host --tmpfs /dev/shm:ro,size=1m -e HTTPS_PROXY -e HTTP_PROXY -e E2E_USER -e E2E_PASS \
   -e NOVA_EXPECT -e NOVAAGENT_TEST_IGNORE_READY_TO_SHOW -e HOST_UID="$(id -u):$(id -g)" \
   --add-host "nova.isigpu.local:$IP" --add-host "identity.isigpu.local:$IP" \
   -v /workdir:/workdir -v "$DEB:/client.deb:ro" -v "$SHOTS:/shots" -e NOVA_SHOTS=/shots -w "$PWD" \
   172.16.50.89:8085/electronuserland/builder:wine bash -c '
 set -e
 export DEBIAN_FRONTEND=noninteractive
-echo "Acquire::http::Proxy \"$HTTP_PROXY\"; Acquire::https::Proxy \"$HTTPS_PROXY\";" > /etc/apt/apt.conf.d/90proxy
-apt-get update -qq >/dev/null && apt-get install -y -qq weston /client.deb >/tmp/apt.log 2>&1 || { tail -20 /tmp/apt.log; exit 1; }
+rm -f /etc/apt/sources.list.d/*
+printf "%s\n" \
+  "deb [arch=amd64] http://172.16.50.89:8083/repository/ubuntu-jammy/ jammy main restricted universe multiverse" \
+  "deb [arch=amd64] http://172.16.50.89:8083/repository/ubuntu-jammy-updates/ jammy-updates main restricted universe multiverse" \
+  "deb [arch=amd64] http://172.16.50.89:8083/repository/ubuntu-jammy-security/ jammy-security main restricted universe multiverse" \
+  > /etc/apt/sources.list
+apt-get update -qq >/dev/null
+apt-get install -y -qq --no-install-recommends weston >/tmp/apt.log 2>&1 || { tail -20 /tmp/apt.log; exit 1; }
+apt-get install -y -qq --no-install-recommends /client.deb >>/tmp/apt.log 2>&1 || { tail -20 /tmp/apt.log; exit 1; }
 unset HTTPS_PROXY HTTP_PROXY DISPLAY
 export XDG_RUNTIME_DIR=/tmp/xdg && mkdir -p $XDG_RUNTIME_DIR && chmod 700 $XDG_RUNTIME_DIR
 weston --backend=headless-backend.so --socket=wayland-1 --idle-time=0 >/tmp/weston.log 2>&1 &

@@ -1,0 +1,10 @@
+A_EXIT=3
+B_ALIVE=yes
+--- A
+[customer-workspace-client] connected wss://nova.isigpu.local/customer-workspace → http://127.0.0.1:18765
+[customer-workspace-client] closed: code=4001 reason=session_replaced
+[customer-workspace-client] stopped: code=4001 reason=session_replaced (not reconnecting)
+--- B
+[customer-workspace-client] connected wss://nova.isigpu.local/customer-workspace → http://127.0.0.1:18765
+gateway replacements: 1
+PASS: session replacement is explicit and final (no reconnect loop)

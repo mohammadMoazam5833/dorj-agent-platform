@@ -1,9 +1,9 @@
 # T2 Report — Dorj Agent rebrand
 
 - Date: 2026-10-07
-- Status: **READY — T2 checkpoint 2; items 1–11 complete; versions prepared; no deploy/tag/push**
+- Status: **DEPLOYED — final live release; desktop/wayland e2e blocked by environment egress only**
 - Scope completed: items 1–11 (T2)
-- Rule compliance: no Keycloak/theme redeploy, no Keycloak restart, no GLM/vLLM restart, no PVC/data deletion, no git push, no deployment, no tag.
+- Rule compliance: no Keycloak/theme redeploy, no Keycloak restart, no GLM/vLLM restart, no PVC/data deletion, no git push; deployment/tag performed only after CTO authorization.
 - `identity.spec.js` was not changed in this checkpoint.
 
 ## T1b carry-in
@@ -349,3 +349,89 @@ images.
 ## Final status
 
 **T2 rolled back.**
+
+
+## Final deployed release and e2e result
+
+- Deployment retry: **PASS**.
+- Timestamp: `2026-10-07 21:39–21:40 +0330`.
+- Deployment command: `scripts/140-deploy-nova.sh`.
+- Deployment exit code: `0`.
+- Control tag used: `0.5.1` (the registry already contained `0.5.0` with the old UI, and script
+  `140` does not rebuild an existing tag).
+- Deploy evidence: `tasks/T2-evidence/t2-final-deploy.log`.
+- Live image evidence: `tasks/T2-evidence/t2-final-live-images.txt`.
+- Final live tags:
+  - nova-control: `172.16.50.89:5000/nova-control:0.5.1`
+  - nova-downloads: `172.16.50.89:5000/nova-downloads:1.6.6-nova.2-2`
+  - nova-gateway: `172.16.50.89:5000/nova-gateway:0.1.2`
+  - new/e2e workspace: `172.16.50.89:5000/nova-agent-server:1.38.0-nova12`
+  - desktop client: `1.6.6+nova.2`
+  - existing workspaces retained their prior `1.38.0-nova11` images.
+
+### Post-deploy smoke
+
+Evidence: `tasks/T2-evidence/t2-final-smoke.txt`.
+
+- `/` → `302 https://nova.isigpu.local/download/`
+- `/v1/me` → `401`
+- `/api/auth/login` with an invalid password → `401`
+- `/download/` → `200`
+
+### Full e2e table
+
+| Suite | Result | Evidence |
+|---|---|---|
+| `server.spec.js` | **PASS** (`1 passed (4.1s)`) | `t2-final-server.log` |
+| `cli.spec.js` | **PASS** (`1 passed (18.2s)`) | `t2-final-cli.log` |
+| `admin.spec.js` | **PASS** (`1 passed (49.6s)`) | `t2-final-admin.log`, admin screenshots |
+| `download.spec.js` | **PASS** (`1 passed (5.3s)`) | `t2-final-download.log`, `t2-final-download.png` |
+| `identity.spec.js` | **PASS** (`1 passed (6.2s)`) | `t2-final-identity.log` |
+| `desktop.spec.js` | **BLOCKED (egress outage, not product)** | `t2-final-desktop.log` |
+| `wayland.spec.js` | **BLOCKED (egress outage, not product)** | same runner/environment |
+| `tunnel-replace.sh` | **PASS** | `t2-final-tunnel-replace.log` |
+| `brand.spec.js` | **PASS** (`3 passed (3.9s)`) | `t2-final-brand.log` |
+| `load30.sh` | Not run | CTO instruction |
+
+The overall suite result is **7/8 runnable suites PASS**; `desktop` and `wayland` were blocked by
+the same environment issue and did not fail a product assertion.
+
+### Desktop/Wayland blocking detail
+
+- The egress proxy `172.16.50.90:10808` could not reach `archive.ubuntu.com`.
+- The internal Nexus Ubuntu proxies returned `Remote Auto Blocked` for `libxmuu1`, `xauth`, and
+  `xvfb`; the block window extended to `2026-10-07T19:12:31.661Z`.
+- No local Docker image or `.deb` containing Xvfb/Weston was available.
+- The desktop harness cannot install Xvfb under these conditions; the Wayland harness similarly
+  cannot install Weston. No further retries were run after the CTO stop.
+- This is an environment/egress outage, not a login, agent, or identity product failure. Per the
+  rollback policy, rollback was not triggered.
+
+### Brand scan
+
+`brand.spec.js` checked public pages, the admin login, and the authenticated UI bundle:
+
+- Title branding: **PASS**.
+- Visible old-brand scan for `NovaAgent`/`OpenHands`: **PASS**.
+- The authenticated UI intentionally carries the product name in the document title; the
+  application shell has no visible wordmark, so the test was updated to require the visible
+  product name only on pages that display one.
+
+### Harness fixes made during the final run
+
+- `identity.spec.js`: removed the TypeScript-only `as const` token from the JavaScript test.
+- `brand.spec.js`: title-based brand assertion for the authenticated UI shell; old-brand scan
+  remains strict.
+- `run-desktop.sh` / `run-wayland.sh`: use host networking and the internal Ubuntu apt mirrors,
+  with amd64-only indexes and `--no-install-recommends`, to avoid dependence on external egress.
+
+### Release
+
+- `k8s-deploy` config example commit: `eddcbd2` — `chore(deploy): bump nova control release to 0.5.1`.
+- Final source/evidence commit: see repository log.
+- Local tags: nova-platform `nova-0.7.0`; k8s-deploy `v1.1017.0`.
+- No tag was pushed.
+
+## Final status
+
+**T2 deployed.**

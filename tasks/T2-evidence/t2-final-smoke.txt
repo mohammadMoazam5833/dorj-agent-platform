@@ -1,0 +1,4 @@
+root: 302 https://nova.isigpu.local/download/
+me: 401
+bad-login: 401
+download: 200

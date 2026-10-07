@@ -1,0 +1,22 @@
+
+Running 1 test using 1 worker
+
+[1A[2K(node:1125358) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:1125358) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[1/1] identity.spec.js:33:5 › agent identity is Dorj Agent (en + fa)
+[1A[2Kidentity.spec.js:33:5 › agent identity is Dorj Agent (en + fa)
+Q: Who are you, and which product or framew
+A: I'm Dorj Agent (in Persian: دستیار دُرج). I'm not built on a particular external product or framework — I'm Dorj Agent, the AI coding assistant you're using right now.
+
+
+[1A[2KQ: تو کی هستی و بر پایه‌ی چه محصولی ساخته ش
+A: من دستیار دُرج (Dorj Agent) هستم، یک دستیار هوش مصنوعی برای انجام وظایف کدنویسی و سیستمی. روی اپلیکیشن دسکتاپ دُرج (Dorj Agent) می‌روم و مستقیماً روی رایانهٔ شخصی شما، پوشه‌ها، فایل‌ها و ترمینال‌تان کار می‌کنم.
+
+
+[1A[2K  1 passed (6.2s)

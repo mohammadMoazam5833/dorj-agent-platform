@@ -1,0 +1,13 @@
+
+Running 1 test using 1 worker
+
+[1A[2K(node:1123203) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:1123203) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[1/1] cli.spec.js:20:5 › nova CLI: sign in, whoami, models, usage, run, logout
+[1A[2K  1 passed (18.2s)

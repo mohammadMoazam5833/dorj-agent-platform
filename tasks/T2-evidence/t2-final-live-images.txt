@@ -1,0 +1,9 @@
+nova:
+nova-control	172.16.50.89:5000/nova-control:0.5.1
+nova-downloads	172.16.50.89:5000/nova-downloads:1.6.6-nova.2-2
+nova-gateway	172.16.50.89:5000/nova-gateway:0.1.2
+nova-ws:
+ws-aidinazimi	172.16.50.89:5000/nova-agent-server:1.38.0-nova11
+ws-clusteradmin	172.16.50.89:5000/nova-agent-server:1.38.0-nova11
+ws-e2e-dorjagent	172.16.50.89:5000/nova-agent-server:1.38.0-nova12
+ws-godarzi	172.16.50.89:5000/nova-agent-server:1.38.0-nova11
