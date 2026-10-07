@@ -87,3 +87,23 @@ Items 3–11 are intentionally not started until the CTO reviews checkpoint 1.
 - Item 11: docs
 
 No `NOVA_CLIENT_REV`, control, agent-server, or download revision bumps were made because this checkpoint did not build or deploy.
+
+## Item 3 — Web UI bundle
+
+- Status: **DONE (build verified; not deployed)**
+- Files:
+  - `web/patch-ui.sh`
+  - `web/finalize-ui.sh`
+  - `web/brand/`
+  - `k8s-deploy/scripts/140-deploy-nova.sh`
+- Implementation:
+  - Build-time patching now applies the platform D mark, favicon asset set, page title,
+    meta description, and web manifest name.
+  - Locale values and post-build JS assets are rewritten to **Dorj Agent**, while preserving
+    required internal protocol/package references (`X-OpenHands-*`, GitHub/OpenHands package URLs).
+  - Deploy script now runs `finalize-ui.sh` after the UI build, so generated deployments use the
+    same customer-visible cleanup.
+  - Temporary UI build succeeded, and the finalizer passed.
+  - Built title/description/manifest verified as `Dorj Agent`; manifest theme is navy `#0B1B3A`.
+  - All 15 built locale JSON files were checked and contained no visible `OpenHands`/`NovaAgent`.
+- Evidence: build/finalizer verification (generated `control/web` is intentionally not committed).
