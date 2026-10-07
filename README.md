@@ -1,14 +1,13 @@
-# NovaAgent platform
+# Dorj Agent platform
 
-Multi-user, Cursor-class coding agents (a standalone product, separate from Dorj): **https://nova.isigpu.local** (web) and the
-**`nova`** CLI. Architecture with C4/sequence/agent-loop diagrams: [`docs/architecture.html`](docs/architecture.html).
+Multi-user, Cursor-class coding agents, visually and verbally aligned with platform.isigpu.local: **https://nova.isigpu.local** (web/desktop) and the **`nova`** / **`dorj-agent`** CLI. Architecture with C4/sequence/agent-loop diagrams: [`docs/architecture.html`](docs/architecture.html).
 
 | Part | Path | What it is |
 |---|---|---|
 | Control plane | `control/` | `nova-control` (FastAPI): identity, per-user workspaces on Kubernetes, LiteLLM key broker, HTTP+WebSocket proxy, metrics, OTel |
-| CLI | `cli/` | `nova` — username/password login, logout, `run`, `chat`, `conversations`, `ws`, `models`, `usage` |
+| CLI | `cli/` | `nova` or `dorj-agent` — username/password login, logout, `run`, `chat`, `conversations`, `ws`, `models`, `usage` |
 | Ops | `deploy/` | Grafana dashboard. Kubernetes manifest + script live in k8s-deploy: `k8s/nova-manifest.yml.tmpl`, `scripts/140-deploy-nova.sh` |
-| Web UI | `/workdir/NovaAgent` | NovaAgent (OpenHands Agent Canvas fork), built with base path `/`, telemetry off |
+| Web UI | `/workdir/NovaAgent` | Dorj Agent UI (OpenHands Agent Canvas fork), built with base path `/`, telemetry off |
 
 ## How a request flows
 browser / desktop / CLI → ingress-nginx (TLS) → `nova-control` (Keycloak-backed tenant-token auth) →
@@ -21,7 +20,7 @@ credentials stay locally protected, and `POST /api/auth/logout` revokes the tena
 ```bash
 pipx install ./cli            # or: pip install --user ./cli
 export NOVA_CA_BUNDLE=/path/to/isigpu-root-ca.crt   # internal CA
-nova login                    # prompts for username/password
+dorj-agent login             # `nova login` remains supported
 nova run "fix the failing auth tests" --model qwen3
 nova chat
 nova ws status | start | stop

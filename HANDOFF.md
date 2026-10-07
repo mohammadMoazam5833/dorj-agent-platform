@@ -1,17 +1,17 @@
-# NovaAgent platform + platform.isigpu.local — handoff
+# Dorj Agent platform + platform.isigpu.local — handoff
 
 _Written 2026-10-07 from the live system and the git history. No secrets in this file._
 
 ## Kholaseh (Finglish)
 
-NovaAgent yek **app-e desktop** baraye moshtari-hast: Windows `.exe` va Linux `.deb`/AppImage.
+Dorj Agent yek **app-e desktop** baraye moshtari-hast: Windows `.exe` va Linux `.deb`/AppImage.
 - Moshtari app ro nasb mikoneh, ba hesab-e AD-e sazman login mikoneh, va agent **rooye system-e khod-e moshtari** kar mikoneh: poosheh-ha, terminal, Python/Node-e hamoon system.
 - Model-ha (Qwen/GLM) az LiteLLM-e khodemoon miyan, va moshtari hich setup-i nadareh.
 - Server rooye Kubernetes dar `https://nova.isigpu.local` ejra misheh.
-- Code-e client va gateway az repo-ye git-e NovaAgent-e, ba overlay-haye kochik va mostanad.
+- Code-e client va gateway az repo-ye Dorj Agent (`/workdir/NovaAgent`) miyad, ba overlay-haye kochik va mostanad.
 - Noskheh-ye live: client `1.6.5+nova.2`.
 
-**Mored-e foori:** repo-ye NovaAgent ba'd az akharin build be `1.6.6` va "Dorj Agent" rebrand shodeh, va ba'zi fix-ha ro khodesh ezafeh kardeh. Pas `140-deploy-nova.sh --rebuild` alan **mishkaneh**. Bakhsh-e "Blocker" ro bekhoonid.
+**Mored-e foori:** repo-ye Dorj Agent be `1.6.6` rebrand shodeh; T2 branding va `1.6.6` reconciliation anjam shodeh. Deploy hanooz anjam nashodeh — etcd check kon va ba'd az deploy full e2e begir.
 
 **platform.isigpu.local (Dorj):** taghirat-e akhir ro dar §9 bebinid:
 - **Storage:** layout-e yek-ja (`shared-models`), quota, alert-haye Ceph.
@@ -28,17 +28,19 @@ NovaAgent yek **app-e desktop** baraye moshtari-hast: Windows `.exe` va Linux `.
 
 | Component | Version | Notes |
 |---|---|---|
-| Desktop client | `1.6.5+nova.2` | Built from NovaAgent `1.6.5` + `desktop/overlay.py`; `.exe` (NSIS), `.deb`, AppImage on `/download/` |
+| Desktop client | `1.6.5+nova.2` | Built from Dorj Agent source `1.6.5` + `desktop/overlay.py`; `.exe` (NSIS), `.deb`, AppImage on `/download/` |
 | nova-control | `0.4.4` deployed | `config.env` already says `0.4.5` (commit `2da16ed`, token revocation + server-side logout) — **not deployed yet** |
-| nova-gateway | `0.1.2` | NovaAgent gateway + `patch_gateway.py` + `ws_close_codes.py` |
-| agent-server | `1.38.0-nova11` | PyPI `openhands-agent-server==1.38.0` + NovaAgent `sidecar_bridge` + `nova_server_patches` + NovaAgent `SOUL.md` |
-| nova-downloads | `1.6.5-nova.2-2` | NovaAgent `scripts/download-site`, rendered by `download/render.py` |
+| nova-gateway | `0.1.2` | Dorj Agent gateway + `patch_gateway.py` + `ws_close_codes.py` |
+| agent-server | `1.38.0-nova11` | PyPI `openhands-agent-server==1.38.0` + Dorj Agent `sidecar_bridge` + `nova_server_patches` + Dorj Agent `SOUL.md` |
+| nova-downloads | `1.6.5-nova.2-2` | Dorj Agent `scripts/download-site`, rendered by `download/render.py` |
 | Keycloak realm | `nova` | AD (`OU=platform`) federated **read-only**; theme `keycloak-theme/nova`; admins = group `nova-admins` |
 | Tags | `nova-platform` → `nova-0.5.1` (latest, includes `2da16ed`); my last: `nova-0.5.0`. `k8s-deploy` → `v1.1015.0` (my last: `v1.1001.0`) | |
 
+**Prepared by T2, not deployed yet:** Dorj Agent client `1.6.6+nova.2`, nova-control `0.5.0`, agent-server `1.38.0-nova12`, and download revision `2`.
+
 URLs:
 - `https://nova.isigpu.local/download/` — public download page (installers, CLI wheel, root CA, `SHA256SUMS`)
-- `https://nova.isigpu.local/admin` — admin panel (NovaAgent's own UI; sign-in = AD user in `nova-admins`)
+- `https://nova.isigpu.local/admin` — Dorj Agent admin panel; sign-in = AD user in `nova-admins`
 - `https://nova.isigpu.local/` — no web product: a browser without the app's token is redirected to `/download/`
 - Grafana dashboard uid `nova-agent`; Prometheus rules `nova.slo`
 
@@ -49,13 +51,13 @@ URLs:
 ```
 Customer PC                               Kubernetes (ns nova / nova-ws)
 ───────────                               ───────────────────────────────
-NovaAgent desktop app (Electron, thin)    ingress-nginx (TLS, nova-tls)
+Dorj Agent desktop app (Electron, thin)    ingress-nginx (TLS, nova-tls)
  ├─ sign-in window ──POST /api/auth/login──► nova-control ── Keycloak realm "nova" (password grant, client nova-desktop)
- ├─ main window ── UI bundle (?t=token) ──►      │  tenant registry = Secret nova-customers (NovaAgent .nova-customers.json format)
+ ├─ main window ── UI bundle (?t=token) ──►      │  tenant registry = Secret nova-customers (Dorj Agent tenant-registry format)
  ├─ local-tools-sidecar :18765 (files/shell)     │  /api/*, /sockets/* ──► ws-<user> agent-server pod (nova-ws, scale-to-zero 30 min)
  └─ reverse tunnel ──WSS /customer-workspace──► nova-control ──► nova-gateway (1 replica) ◄── agent-server /c/<user>/v1 (sidecar_bridge)
                                                  │  /llmapi/* ──► LiteLLM (user's own virtual key; models qwen3, glm)
-                                                 └─ /admin (NovaAgent admin UI, k8s-backed API)
+                                                 └─ /admin (Dorj Agent admin UI, k8s-backed API)
 ```
 
 - The agent "brain" (agent-server) runs in the cluster; **its file and terminal tools run on the customer's PC** through `sidecar_bridge` → gateway → tunnel → sidecar. `nova_server_patches` makes that work for the stock agent-server. It handles:
@@ -65,7 +67,7 @@ NovaAgent desktop app (Electron, thin)    ingress-nginx (TLS, nova-tls)
   - `/llmapi` → internal LiteLLM;
   - a reasoning-effort map;
   - `<USER_MACHINE>` context (OS, home, shell, runtimes from the sidecar hello);
-  - NovaAgent identity (SOUL / self-documentation).
+  - Dorj Agent identity (SOUL / self-documentation).
 - Token = the tenant ("workspace") token from `/api/auth/login`. It is used as the UI session key, as the tunnel credential, and by the agent-server to reach the gateway. The admin panel's "sign out devices" rotates it. There is no cookie-by-name and no default tenant (the VM version's holes).
 - Full design doc: `docs/architecture.html` (Artifact `https://claude.ai/artifact/KKnEsvnRn28q677Va2dXSd`; last edited in commit `2da16ed`).
 
@@ -74,7 +76,7 @@ NovaAgent desktop app (Electron, thin)    ingress-nginx (TLS, nova-tls)
 | Path | What |
 |---|---|
 | `/workdir/nova-platform` | Our code (git, tags `nova-*`): `control/` (FastAPI edge), `agent-server/` (image + `nova_server_patches`), `gateway/` (wrapper + `patch_gateway.py`), `patches/ws_close_codes.py`, `desktop/` (`build-client.sh`, `overlay.py`, `login-prompt.html`, `loading.html`, `org-root-ca.crt`), `download/` (`render.py`, nginx), `cli/` (`nova`), `e2e/`, `deploy/` (Grafana), `docs/` |
-| `/workdir/NovaAgent` | Upstream product source (`github.com/mohammadMoazam5833/NovaAgent`). Client, gateway, sidecar, admin UI, download page and `SOUL.md` all come from here. **Never edited in place by us** — changes go through overlays/patches that assert their anchors |
+| `/workdir/NovaAgent` | Dorj Agent product source (`github.com/mohammadMoazam5833/NovaAgent`). Client, gateway, sidecar, admin UI, download page and `SOUL.md` all come from here. **Never edited in place by us** — changes go through overlays/patches that assert their anchors |
 | `/workdir/k8s-deploy` | Deploy toolkit (git, tags `v1.*`): `scripts/140-deploy-nova.sh`, `scripts/141-setup-nova-realm.sh`, `k8s/nova-manifest.yml.tmpl`, `keycloak-theme/nova`, `config.env` (`NOVA_*`) |
 | `/workdir/NovaAgent-bugfix-doc.md` | Customer bug report (Wayland splash, session_replaced) — fixed in `1.6.5+nova.2` |
 
@@ -86,9 +88,9 @@ cd /workdir/k8s-deploy
 ./scripts/140-deploy-nova.sh [--rebuild] [--skip-sso]
 ```
 `140` builds and pushes only what is missing in the local registry, unless `--rebuild` is given:
-- agent-server image: copies NovaAgent `SOUL.md`;
+- agent-server image: copies Dorj Agent `SOUL.md`;
 - gateway image;
-- nova-control image: UI bundle built from NovaAgent + `nova-admin.mjs`;
+- nova-control image: UI bundle built from Dorj Agent source + `nova-admin.mjs`;
 - client installers: `desktop/build-client.sh`, using the wine builder image;
 - download image.
 
@@ -99,7 +101,7 @@ Version knobs in `config.env`:
 | Knob | Meaning |
 |---|---|
 | `NOVA_CONTROL_TAG`, `NOVA_GATEWAY_TAG`, `NOVA_AGENT_SERVER_TAG` | Image tags |
-| `NOVA_CLIENT_REV` | Client version becomes `<NovaAgent version>+nova.N`. Use `+`, not `-`: a `-` turns into a Debian `~`, which apt treats as a downgrade |
+| `NOVA_CLIENT_REV` | Client version becomes `<Dorj Agent source version>+nova.N`. Use `+`, not `-`: a `-` turns into a Debian `~`, which apt treats as a downgrade |
 | `NOVA_DOWNLOADS_REV` | Republish the download page for the same client version |
 
 Gotchas:
@@ -114,10 +116,11 @@ Credentials only via env (`E2E_USER`, `E2E_PASS`; test user `clusteradmin` — p
 | Test | How | Proves |
 |---|---|---|
 | `server.spec.js` | `npx playwright test -c playwright.config.js server.spec.js` | No web product, sign-in contract, token-only identity (forged headers / VM cookie ignored), UI boot with company LLM preset, `/llmapi` allowlist |
-| `cli.spec.js` | same | `nova login/whoami/models/usage/run/logout` |
+| `cli.spec.js` | same | `nova` / `dorj-agent` login/whoami/models/usage/run/logout |
 | `admin.spec.js` | same | Admin sign-in, dashboard, users, conversations, logs, LLM |
 | `download.spec.js` | same | Public page, every file matches `SHA256SUMS` |
-| `identity.spec.js` | same | Agent answers "NovaAgent" (en + fa), never "OpenHands" |
+| `brand.spec.js` | same | Public/admin/UI pages show Dorj Agent and do not expose old product branding |
+| `identity.spec.js` | same | Agent answers "Dorj Agent" / «دستیار دُرج» (en + fa), never "OpenHands" |
 | `desktop.spec.js` | `./run-desktop.sh <shots>` | Installs the `.deb` in Ubuntu 22.04 (read-only `/dev/shm`), sign-in, UI, agent writes a file **on that machine**, `<USER_MACHINE>` has its OS/home |
 | `wayland.spec.js` | `./run-wayland.sh [deb] [shots]` (+ `NOVA_EXPECT=stuck` for an old build, `NOVAAGENT_TEST_IGNORE_READY_TO_SHOW=1`) | Under weston: main window revealed (fallback). `+nova.1` reproduces the deadlock |
 | `tunnel-replace.sh` | `./tunnel-replace.sh` | Same account on two PCs: first gets `4001 session_replaced`, stops; second stays; one replacement |
@@ -125,7 +128,7 @@ Credentials only via env (`E2E_USER`, `E2E_PASS`; test user `clusteradmin` — p
 
 Control-plane unit tests: run `pytest` in the `nova-control` image against `control/` (13 tests).
 
-## 6. Blocker — NovaAgent upstream moved to 1.6.6 "Dorj Agent"
+## 6. Upstream reconciliation — Dorj Agent source moved to `1.6.6`
 
 New upstream commits after `1.6.5+nova.2` was built:
 - **`0b8de83` rebrand Nova Agent → Dorj Agent:**
@@ -141,6 +144,8 @@ Effect, verified by a dry run on 2026-10-07:
 - **Gateway:** `patch_gateway.py` still applies and is still needed. The upstream gateway still closes a replaced session without 4001 and still has the shared-id cross-tenant mix-up. `ws_close_codes.py` fails there too.
 - **Result:** `140-deploy-nova.sh --rebuild`, or any client/gateway rebuild, stops until the patches are reconciled. The live system is unaffected.
 
+> **Reconciliation status:** resolved in `3b1cc13`. The diagnosis and checklist below are historical context; full deployment and the complete post-deploy e2e table are still outstanding.
+
 > **In progress (2026-10-07 ~16:00):** someone is already reconciling this. These files have
 > **uncommitted** changes in the working tree:
 > - `desktop/overlay.py`
@@ -154,13 +159,13 @@ What to do:
 1. **Branding:** confirm with the owner whether the product name is now "Dorj Agent" (memory says Nova is a product separate from Dorj — the rebrand may reverse that). It affects:
    - the `login-prompt.html` / `loading.html` texts;
    - SOUL / identity (`nova_server_patches.NOVA_SOUL`, the realm display name and the theme);
-   - the download file names, which `render.py` matches by pattern (`NovaAgent-…`);
+   - the download file names, now `Dorj-Agent-Client-…`;
    - `identity.spec.js`.
 2. **`patches/ws_close_codes.py`:** make it a no-op when `ws.mjs` already encodes close payloads. Upstream now does. Keep only what upstream lacks: echoing the peer code and `onClose` for socket drops (1006). Then adapt `overlay.py`'s `client.mjs` edit to `onClose(info)`. Upstream stops only on 4001; we stop on any 4xxx, exit 3, which shows the "account open elsewhere" dialog, and we ignore stale sockets.
 3. **`overlay.py` `forgetWorkspaceToken`:** also delete `workspaceTokenEncrypted`.
-4. **Thin config:** re-check every anchor against `1.6.6`. Decide whether artifact names with a space are wanted; URLs and NSIS handle them, but the download page and the tests expect `NovaAgent-…`.
+4. **Thin config:** re-check every anchor against `1.6.6`; download page and tests require `Dorj-Agent-Client-…`.
 5. **Rebuild and re-run the whole e2e table** before publishing. Bump `NOVA_CLIENT_REV` or reset it for `1.6.6+nova.1`.
-6. **Gateway:** consider upstreaming `patch_gateway.py` (the cross-tenant response mix-up and 4001) to NovaAgent so it can be dropped here.
+6. **Gateway:** consider upstreaming `patch_gateway.py` (the cross-tenant response mix-up and 4001) so it can be dropped here.
 
 ## 7. Operations notes
 
@@ -185,7 +190,7 @@ What to do:
   - The Wayland fix was verified under weston only; please confirm on real GNOME Wayland.
 - **DNS:** the record on `dc-srv` (owner).
 - **Leftovers in Dorj SSO:** the Dex client `nova-cli` and the `nova` callback. Removing them restarts Dex and the platform oauth2-proxy, so ask first.
-- **Admin panel:** the tables (NovaAgent UI) lack the filter/sort/pagination the project requires.
+- **Admin panel:** the Dorj Agent admin tables lack the filter/sort/pagination the project requires.
 - **Billing:** `NOVA_MONTHLY_BUDGET_USD=0`, so budgets are not enforced; qwen3 has no LiteLLM price (spend shows 0). The owner said pricing is not needed for now.
 - **Customer-side safety:**
   - The sidecar roots are the whole home folder.
