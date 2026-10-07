@@ -125,3 +125,21 @@ No `NOVA_CLIENT_REV`, control, agent-server, or download revision bumps were mad
     navy/gold tokens, and Persian product name were present; old product names and old colors absent.
   - Existing relevant pytest modules require a control-plane dependency environment not installed on
     this host; runtime branding was therefore validated by direct render and compile checks.
+
+## Item 5 — Download page
+
+- Status: **DONE (render verified; not deployed)**
+- Files:
+  - `download/render.py`
+  - `web/brand/dorj-wordmark.png`
+- Implementation:
+  - Download page now uses the platform D favicon, wordmark logo, navy/lapis palette, gold CTA,
+    navy terminal panels, and matching theme color.
+  - Rendered artifact names remain `Dorj-Agent-Client-*`.
+  - Rendered HTML is guarded against `NovaAgent`, `OpenHands`, and old brand color remnants.
+- Verification:
+  - `python3 -m py_compile download/render.py`
+  - Rendered from the current NovaAgent HEAD into `/tmp/t2-download` with `https://nova.isigpu.local`.
+  - Verified 11 visible/code occurrences of `Dorj Agent`, no legacy product names/colors, and the
+    copied wordmark/favicon assets.
+- Evidence: `tasks/T2-evidence/t2-item5-download-index.html`

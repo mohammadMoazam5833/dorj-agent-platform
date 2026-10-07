@@ -34,6 +34,8 @@ shutil.copy2(ROOT / "desktop/org-root-ca.crt", out / "isigpu-root-ca.crt")
 extras.append("isigpu-root-ca.crt")
 for f in ROOT.joinpath("download").glob("vazirmatn-*.woff2"):
     shutil.copy2(f, out / f.name)
+shutil.copy2(ROOT / "web/brand/dorj-wordmark.png", out / "dorj-wordmark.png")
+shutil.copy2(ROOT / "web/brand/favicon-64x64.png", out / "dorj-favicon.png")
 
 html = (src / "scripts/download-site/index.html").read_text(encoding="utf-8")
 sizes = [(out / f).stat().st_size / 1e6 for f in files.values()]
@@ -60,6 +62,28 @@ sub(rf'<b class="ltr">{ver_re}</b>', f'<b class="ltr">{ver}</b>')
 sub(r"\d+[–-]\d+ MB", f"{min(sizes):.0f}–{max(sizes):.0f} MB")
 sub(r"\b\d{1,3}(?:\.\d{1,3}){3}:\d+\b", host, required=False)
 sub(r'از منوی <b>[^<]+</b> خارج شوید[^<]*', 'از منوی <b>Dorj Agent ← خروج از حساب</b> خارج شوید؛ برای سرور دیگر نسخه‌ی مخصوص آن سرور را از همان سرور دانلود کنید.', required=False)
+# Platform brand: the customer-facing download page uses the same palette and logo as the login
+# page and main UI. Anchors are kept explicit so upstream changes remain visible.
+sub(r'<link rel="icon" type="image/svg\+xml" href="[^"]+" />',
+    '<link rel="icon" type="image/png" href="dorj-favicon.png" />')
+sub(r'<meta name="theme-color" content="[^"]+" />', '<meta name="theme-color" content="#0B1B3A" />')
+sub(r'--bg:#0a0d13;--s1:#10141d;--s2:#151a26;--line:#232a38;--fg:#eef1f6;--mut:#9aa6ba;--dim:#6b778c;--coral:#e0805f;--mint:#7be0b4;--vio:#8b7cf6',
+    '--bg:#0B1B3A;--s1:#11244e;--s2:#183567;--line:#2b4a8f;--fg:#f5f7fb;--mut:#b7c3db;--dim:#8b9ac2;--coral:#E8A317;--mint:#4CC38A;--vio:#4C6EF5')
+sub(r'<a class="brand" href="#"><span><span class="nc">D</span>orj Agent</span></a>',
+    '<a class="brand" href="#" aria-label="Dorj Agent"><img src="dorj-wordmark.png" alt="Dorj Agent" style="width:112px;height:auto"></a>')
+sub(r'rgba\(10,13,19,\.78\)', 'rgba(11,27,58,.82)')
+sub(r'rgba\(224,128,95,', 'rgba(232,163,23,', required=False)
+sub(r'rgba\(139,124,246,', 'rgba(76,110,245,', required=False)
+sub(r'\.dl-main\{[^}]+\}', '.dl-main{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:12px;'
+    'background:linear-gradient(120deg,#E8A317,#F4C24B);color:#0B1B3A;text-decoration:none;font-weight:700;font-size:16px;'
+    'padding:15px 30px;border-radius:14px;box-shadow:0 10px 40px -8px rgba(232,163,23,.5);'
+    'transition:transform .25s var(--ease),box-shadow .25s}')
+sub(r'\.dl-main:hover\{[^}]+\}', '.dl-main:hover{transform:translateY(-2px);box-shadow:0 16px 44px -8px rgba(232,163,23,.62)}')
+sub(r'#e0805f', '#E8A317', required=False)
+sub(r'#8b7cf6', '#4C6EF5', required=False)
+sub(r'#06080c', '#081431', required=False)
+sub(r'#3a4356', '#b7c3db', required=False)
+sub(r'#3a4458', '#35508f', required=False)
 # self-hosted Vazirmatn (customers' machines need not reach Google Fonts)
 sub(r"<style>\n", "<style>\n@font-face{font-family:'Vazirmatn';src:url(vazirmatn-400.woff2) format('woff2');font-weight:400;font-display:swap}\n"
     "@font-face{font-family:'Vazirmatn';src:url(vazirmatn-600.woff2) format('woff2');font-weight:600 800;font-display:swap}\n", count=1)
@@ -69,6 +93,9 @@ if wheels:
                f'گواهی ریشه‌ی سازمان: <a class="ltr" href="isigpu-root-ca.crt">isigpu-root-ca.crt</a>.</div>\n    </details>\n    ')
     sub(r"<details>\s*<summary>[^<]*به اشتراک AI", faq_cli + "<details>\n      <summary>به اشتراک AI", required=False, count=1)
 assert "172.16.40.188" not in html
+for legacy in ("#e0805f", "#8b7cf6", "NovaAgent", "OpenHands"):
+    if legacy in html:
+        sys.exit(f"download page: legacy token remains: {legacy}")
 (out / "index.html").write_text(html, encoding="utf-8")
 names = sorted(list(files.values()) + extras)
 (out / "SHA256SUMS").write_text("".join(f"{hashlib.sha256((out / n).read_bytes()).hexdigest()}  {n}\n" for n in names))
