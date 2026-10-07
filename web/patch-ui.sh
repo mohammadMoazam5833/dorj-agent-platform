@@ -27,7 +27,11 @@ const applyProductBrand = (value) => value
   .replace(/OpenHands Provider LLM Key/g, "Dorj Agent API Key")
   .replace(/OpenHands Cloud/g, "Dorj Agent")
   .replace(/OpenHands/g, "Dorj Agent")
-  .replace(/NovaAgent/g, "Dorj Agent");
+  .replace(/NovaAgent/g, "Dorj Agent")
+  // lower-case visible mentions ("@openhands fix ...", contact address); `.openhands/` stays:
+  // it is the real folder the agent reads (memory, setup.sh), renaming it would break that.
+  .replace(/[\w.+-]+@openhands\.dev/g, "your administrator")
+  .replace(/@openhands\b/g, "@dorj-agent");
 
 // Locale values are shown to users. Keep JSON keys and internal lower-case
 // identifiers untouched so server contracts and imports remain stable.
@@ -36,6 +40,13 @@ const translations = JSON.parse(fs.readFileSync(translationPath, "utf8"));
 for (const values of Object.values(translations)) {
   for (const [key, value] of Object.entries(values)) {
     if (typeof value === "string") values[key] = applyProductBrand(value);
+  }
+}
+// Command-menu search keywords (not shown, but searchable): "openhands" -> "dorj".
+for (const [id, values] of Object.entries(translations)) {
+  if (!id.endsWith("_KEYWORDS")) continue;
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value === "string") values[key] = value.replace(/\bopenhands\b/gi, "dorj");
   }
 }
 fs.writeFileSync(translationPath, JSON.stringify(translations, null, 2) + "\n");
