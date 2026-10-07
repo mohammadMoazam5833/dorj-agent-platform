@@ -1,4 +1,4 @@
-"""Sign-in for the nova CLI - the same contract as the NovaAgent desktop app: POST /api/auth/login
+"""Sign-in for the nova CLI - the same contract as the Dorj Agent desktop app: POST /api/auth/login
 {username, password} -> tenant token (checked against the organisation's accounts server-side).
 Stored in ~/.config/nova/credentials.json (mode 0600); `nova logout` forgets it, and an
 administrator's "sign out devices" (token rotation) invalidates it everywhere."""

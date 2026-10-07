@@ -1,4 +1,4 @@
-"""nova — NovaAgent CLI.
+"""nova — Dorj Agent CLI.
 
   nova login | logout | whoami
   nova run "task" [--model M] [--json]      one-shot task; exit 0 ok, 2 quota, 3 auth, 1 error
@@ -124,7 +124,7 @@ def cmd_chat(a):
     api = Api()
     api.req("POST", "/v1/workspace")
     conv = a.resume or _start_conversation(api, a.model)
-    print(f"NovaAgent chat — conversation {conv}. Ctrl+D baraye khorooj.")
+    print(f"Dorj Agent chat — conversation {conv}. Ctrl+D baraye khorooj.")
     seen = len(api.req("GET", f"/api/conversations/{conv}/events/search", params={"limit": 100}).get("items", []))
     while True:
         try:
@@ -195,8 +195,8 @@ def cmd_logout(a):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="nova", description="NovaAgent CLI")
-    p.add_argument("--version", action="version", version=f"nova {__version__}")
+    p = argparse.ArgumentParser(prog="dorj-agent", description="Dorj Agent CLI")
+    p.add_argument("--version", action="version", version=f"Dorj Agent {__version__}")
     p.add_argument("--json", action="store_true", help="khoroji-e JSON baraye script va CI")
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("login"); s.add_argument("--server", default=auth.DEFAULT_SERVER); s.add_argument("--username", "-u"); s.set_defaults(fn=cmd_login)

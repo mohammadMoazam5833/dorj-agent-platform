@@ -180,3 +180,19 @@ No `NOVA_CLIENT_REV`, control, agent-server, or download revision bumps were mad
   - `bash -n scripts/141-setup-nova-realm.sh`
   - Ran the idempotent script successfully; it reported a successful read-only LDAP sync and no
     Keycloak restart/theme redeploy. Credentials were not printed or stored in evidence.
+
+## Item 8 — CLI
+
+- Status: **DONE**
+- Files:
+  - `cli/pyproject.toml`
+  - `cli/nova_cli/main.py`
+  - `cli/nova_cli/auth.py`
+- Implementation:
+  - User-facing help, version, chat banner, and package description now say **Dorj Agent**.
+  - Added the `dorj-agent` console command while retaining the existing `nova` command.
+  - Internal package/module name (`nova-cli` / `nova_cli`) remains unchanged.
+- Verification:
+  - `python3 -m py_compile` on CLI modules.
+  - Packaging check confirmed both console scripts point to the same entrypoint.
+  - `PYTHONPATH=cli dorj-agent --help` rendered `Dorj Agent CLI` successfully.
