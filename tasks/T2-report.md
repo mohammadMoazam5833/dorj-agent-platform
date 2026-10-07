@@ -293,3 +293,26 @@ images.
 - Full post-deploy e2e has **not** run yet.
 - The deployment prerequisite remains: check `etcdctl endpoint status` before script `140`.
 - This is the requested **T2 checkpoint 2** state.
+
+## Deployment attempt and rollback
+
+- Result: **ROLLED BACK**.
+- Timestamp: `2026-10-07 21:07–21:13 +0330`.
+- The owner-approved deployment was started with `scripts/140-deploy-nova.sh`.
+- The run failed during the NovaAgent web build before manifest apply:
+  `TypeError [ERR_INVALID_ARG_TYPE]: The "path" argument must be of type string. Received undefined`
+  in the web overlay Node script (`node:internal/errors:543`). No application smoke checks were run
+  because the deployment itself failed.
+- The documented rollback was executed immediately and completed successfully. Since script 140 had
+  not reached manifest apply, the live image tags were already the rollback versions; the idempotent
+  `set image` operations did not introduce a new version.
+- Post-rollback live images:
+  - nova-control: `172.16.50.89:5000/nova-control:0.4.4`
+  - nova-downloads: `172.16.50.89:5000/nova-downloads:1.6.6-nova.1-1`
+  - all `nova-ws` workspaces: `172.16.50.89:5000/nova-agent-server:1.38.0-nova11`
+- Rollout checks passed for `nova-control`, `nova-downloads`, and every `nova-ws` deployment.
+- Per the failure instruction, no further application tests or deployment retry was attempted after rollback. Only this rollback report was recorded.
+
+## Final status
+
+**T2 rolled back.**
