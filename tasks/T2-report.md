@@ -107,3 +107,21 @@ No `NOVA_CLIENT_REV`, control, agent-server, or download revision bumps were mad
   - Built title/description/manifest verified as `Dorj Agent`; manifest theme is navy `#0B1B3A`.
   - All 15 built locale JSON files were checked and contained no visible `OpenHands`/`NovaAgent`.
 - Evidence: build/finalizer verification (generated `control/web` is intentionally not committed).
+
+## Item 4 — Admin UI
+
+- Status: **DONE (render verified; not deployed)**
+- Files:
+  - `control/nova_control/adminpage.py`
+- Implementation:
+  - Page title is now `Dorj Agent | پنل مدیریت`.
+  - Login and header use the platform Dorj favicon/logo and `Dorj Agent` / «دستیار دُرج».
+  - Admin palette now uses platform navy/lapis, gold accent, and light surface-compatible text colors.
+  - Chart/spark colors were moved off the old orange/purple theme to Dorj gold/lapis.
+  - The rendered HTML is guarded against visible `NovaAgent`/`OpenHands` remnants.
+- Verification:
+  - `python3 -m py_compile control/nova_control/adminpage.py`
+  - Rendered the generated admin source with `NOVA_ADMIN_PAGE`/`NOVA_WEB_ROOT`; title, logo data URI,
+    navy/gold tokens, and Persian product name were present; old product names and old colors absent.
+  - Existing relevant pytest modules require a control-plane dependency environment not installed on
+    this host; runtime branding was therefore validated by direct render and compile checks.
