@@ -1,4 +1,4 @@
-# NovaAgent platform — handoff
+# NovaAgent platform + platform.isigpu.local — handoff
 
 _Written 2026-10-07 from the live system and the git history. No secrets in this file._
 
@@ -12,6 +12,15 @@ NovaAgent yek **app-e desktop** baraye moshtari-hast: Windows `.exe` va Linux `.
 - Noskheh-ye live: client `1.6.5+nova.2`.
 
 **Mored-e foori:** repo-ye NovaAgent ba'd az akharin build be `1.6.6` va "Dorj Agent" rebrand shodeh, va ba'zi fix-ha ro khodesh ezafeh kardeh. Pas `140-deploy-nova.sh --rebuild` alan **mishkaneh**. Bakhsh-e "Blocker" ro bekhoonid.
+
+**platform.isigpu.local (Dorj):** taghirat-e akhir ro dar §9 bebinid:
+- **Storage:** layout-e yek-ja (`shared-models`), quota, alert-haye Ceph.
+- **Admin panel:** `v70`.
+- **UI-e dorjService:** `0.3.31`.
+- **Login:** modal-haye jadid.
+- **Do outage-e infra:** etcd va Ceph.
+
+13 commit-e `dorjService` hanooz push nashodan.
 
 ---
 
@@ -174,3 +183,71 @@ What to do:
   - There is no per-command confirmation on the customer PC.
   - Review item 1 in `/workdir/novaagent` still applies.
 - **Scale:** the gateway is a single replica (tunnels live in memory). Fine for ~30 customers; HA needs consistent routing by tenant.
+
+## 9. platform.isigpu.local (Dorj) — changes and state
+
+Live images:
+- `dorj-service` **0.3.31** (React UI, `DORJ_SERVICE_TAG`);
+- `kubeflow-admin-panel` **v70**;
+- `fplatform-centraldashboard` **v3** (Polymer UI removed).
+
+Code lives in:
+- `/workdir/dorjService` (branch `goodarzi-phase3`);
+- `/workdir/k8s-deploy` (admin panel `kubeflow-admin-panel/`, Keycloak themes `keycloak-theme/`, scripts, `RUNBOOK.md`, `CLAUDE.md`).
+
+### 9.1 Latest changes (2026-10-06 / 07)
+
+**Storage / Ceph — after the Ceph full outage (RUNBOOK §261)**
+
+| Commit | Change |
+|---|---|
+| `ce15063`, `7e76a50` | RUNBOOK §261: Ceph hit `full_ratio` 95% → every write froze → Keycloak's Postgres hung → 503 on every SSO login (2026-10-06 21:43 → 07 ~05:00 UTC). Diagnosis + recovery commands + prevention |
+| `5264a46` | `scripts/142` 8 Ti ResourceQuota on `model-mirror` |
+| `b8de34e` | `scripts/143` Ceph capacity alerts emailed to postmaster |
+| `a5b1c05`, `35d4644` | Ceph free-space guard before every model write (admin panel v68) and in `scripts/47` |
+| `72a0978`, `58bc0b8` | Single model storage layout: `shared-models` only (v69); staged downloads into `shared-models/.incoming` then atomic move (v70) |
+| `113b8d1`, `6ca56cf`, `cab6a36`, `d6096be` | `scripts/144` migrates models to the shared layout (no partial downloads, pod-name length fix, deletes the succeeded Job before the mirror PVC) |
+
+**Admin panel and login**
+
+| Commit | Change |
+|---|---|
+| `b64ee27` | HF token settings for gated model downloads (+ dorjService `f03a8b3` HF token card) |
+| `fdba384`, `60d08b0` | Keycloak login theme: contact-admin modal matches the password modal; category select → choice cards |
+
+**dorjService UI (2026-10-06, 15 commits after tag `dorj-0.3.18`):**
+- Charts are now ECharts (dashboard, usage, monitoring), with a loading skeleton, an empty state and a single legend.
+- The user account moved into the header widget (prefs, password, sign-out).
+- The home icon was removed; the Dorj logo now goes home.
+- New change-password modal with strength validation.
+- YAML tab removed from notebook details.
+
+### 9.2 Earlier platform work in this session (2026-10-03 … 05)
+
+| Area | What | Where |
+|---|---|---|
+| dorjService cutover | React UI serves platform.isigpu.local (phase 3.7, rollback guard) | scripts 135/138 |
+| Polymer UI | Removed, backup kept | tag `polymer-ui-removed`, `backups/polymer-ui-removal-20261004-161038` |
+| Sidebar / UX | Email, backups, contributors, admin panel, Persian digits / Jalali, collapse toggle; Access tab fixes; spinners | dorjService `0.3.14`–`0.3.18` |
+| Logout | Real sign-out: Keycloak end-session → `/oauth2/sign_out` (+ Dex post-logout URIs) | `src/lib/session.js`, script 134 `--logout-uris` |
+| Login theme | `dorj-v3`: split layout, 3D floating "D", formal wording, mobile = form only, docs panel on the login page | `keycloak-theme/dorj-v3` |
+| Dex | Key-rotation window fixed (signingKeys 168 h, istiod JWKS refresh 15 s) | script 139 |
+| Admin panel | Keycloak 503 → internal Service (v64/65), skip 404 groups, SGLang `SGLANG_TRACE_LEVEL=2` (v66) | `kubeflow-admin-panel/server.py` |
+| Tempo | PVC 80Gi, 8Gi memory, trace sharding; UI guard for giant traces | script 118, `Monitoring.jsx` |
+| etcd outage 2026-10-05 | NOSPACE → all writes failed, VIP `.201` down; compact+defrag+disarm; root cause = write amplification (Falco ring-buffer ConfigMap) | `CLAUDE.md` (etcd section) |
+
+### 9.3 Open items on the platform
+
+- **Push dorjService:** 13 commits are ahead of `origin/goodarzi-phase3`. Pushing is done by the owner — the assistant is not allowed to push.
+- **GLM restart** (~48 min) to apply `SGLANG_TRACE_LEVEL=2`. Code is done; it waits for the owner's go.
+- **etcd follow-ups:**
+  - debounce the admin-panel Falco ring-buffer write;
+  - a Falco exception for kube-vip's ARP;
+  - periodic defrag;
+  - a DB-size alert;
+  - quota 8 GiB.
+
+  None existed as of 2026-10-05 (see `CLAUDE.md`). The Ceph work above is a separate storage problem and does not cover etcd.
+- **Ceph:** after §261 data was deleted and quotas/alerts added. Watch `ceph osd df`: the `full_ratio` must be back at 0.95 (RUNBOOK §261 recovery set it to 0.96 temporarily).
+- **Root CA:** 11 app bundles and user bundles still carry only the old root (memory "Dex root-CA encoding").
+- **Admin panel tables** must have filter/sort/pagination (project rule) — check new tables (HF token, storage) too.
