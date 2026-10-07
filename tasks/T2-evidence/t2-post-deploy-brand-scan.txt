@@ -1,0 +1,33 @@
+{
+  "public": [
+    {
+      "path": "/",
+      "status": 200,
+      "finalPath": "/download/",
+      "visibleOldBrand": false,
+      "title": "Dorj Agent",
+      "bodyPreview": "Dorj Agent\nv1.6.6+nova.2\nنصب\nقابلیت‌ها\nسؤالات\nدانلود\nبرنامه‌ریزی می‌کند، کد می‌نویسد\nتست می‌گیرد، تحویل می‌دهد\n\nDorj Agent مثل یه همکار باتجربه کنارته. فقط بگو چی می‌خوای؛ خودش کد "
+    },
+    {
+      "path": "/download/",
+      "status": 200,
+      "finalPath": "/download/",
+      "visibleOldBrand": false,
+      "title": "Dorj Agent",
+      "bodyPreview": "Dorj Agent\nv1.6.6+nova.2\nنصب\nقابلیت‌ها\nسؤالات\nدانلود\nبرنامه‌ریزی می‌کند، کد می‌نویسد\nتست می‌گیرد، تحویل می‌دهد\n\nDorj Agent مثل یه همکار باتجربه کنارته. فقط بگو چی می‌خوای؛ خودش کد "
+    },
+    {
+      "path": "/admin",
+      "status": 200,
+      "finalPath": "/admin",
+      "visibleOldBrand": false,
+      "title": "Dorj Agent | پنل مدیریت",
+      "bodyPreview": "Dorj Agent | پنل مدیریت\nدستیار دُرج\n\nپنل مدیریت و مانیتورینگ سرور\n\nنمایش رمز\nورود\n\nپنل مدیریت · v4"
+    }
+  ],
+  "uiBundle": {
+    "visibleOldBrand": true,
+    "title": "Dorj Agent",
+    "bodyPreview": "Dorj Agent\nAdd a backend\nHost Name\n\nA friendly label for this backend\n\nHost\n\nURL of your agent server\n\nType\nLocal\nCloud\nAPI Key\nNext\nDorj Agent\n\nConnect instantly to Dorj Agent to try out Dorj Agent\n\nLogin with Dorj Agent\nAdvanced\nChoose your agent\n\nPick the agent that will drive your conversations."
+  }
+}

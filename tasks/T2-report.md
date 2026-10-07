@@ -316,3 +316,36 @@ images.
 ## Final status
 
 **T2 rolled back.**
+
+## Deployment retry and final rollback
+
+- Result: **ROLLED BACK**.
+- Pre-deploy etcd retry check: **PASS** (`645.6 MB`, `644.4 MB`, `640.1 MB`; all below `1.5 GiB`).
+- The `SCRIPT_DIR` build fix (`a729400`) allowed the web build and desktop/download build to complete.
+- Deployment applied successfully:
+  - nova-control: `0.5.0`
+  - nova-downloads: `1.6.6-nova.2-2`
+  - desktop client: `1.6.6+nova.2`
+- Smoke and download e2e passed:
+  - `/` → `302 https://nova.isigpu.local/download/`
+  - `/v1/me` → `401`
+  - invalid password `/api/auth/login` → `401`
+  - `/download/` → `200`
+  - `download.spec.js` → `1 passed`.
+- Public-page visible-brand scan passed for `/`, `/download/`, and `/admin`.
+- UI-bundle render scan failed: it exposed a visible old-brand string in the Slack-channel-monitor
+  template: `Watch Slack channels for @openhands mentions`. This satisfies the requested immediate
+  rollback condition.
+- The documented rollback was executed immediately. All `nova-ws` deployments were checked again after
+  the initial loop because `ws-e2e-dorjagent` was created during deployment; it was also rolled back.
+- Final live images:
+  - nova-control: `172.16.50.89:5000/nova-control:0.4.4`
+  - nova-downloads: `172.16.50.89:5000/nova-downloads:1.6.6-nova.1-1`
+  - all `nova-ws` workspaces: `172.16.50.89:5000/nova-agent-server:1.38.0-nova11`
+- Rollout checks passed after rollback.
+- No commit/tag for the failed release was created, no push was performed, and no further deployment
+  retry was attempted.
+
+## Final status
+
+**T2 rolled back.**

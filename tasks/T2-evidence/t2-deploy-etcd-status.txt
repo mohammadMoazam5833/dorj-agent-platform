@@ -1,4 +1,4 @@
-T2 pre-deploy etcd endpoint status — 2026-10-07
-DB SIZE: master-01 646 MB, master-02 644 MB, master-03 640 MB
+T2 retry pre-deploy etcd status — 2026-10-07 21:17 +0330
+DB SIZE: master-01 645.6 MB, master-02 644.4 MB, master-03 640.1 MB
 Threshold: 1.5 GiB
-Result: PASS (all members healthy/in sync, no errors)
+PASS
