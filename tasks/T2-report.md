@@ -143,3 +143,24 @@ No `NOVA_CLIENT_REV`, control, agent-server, or download revision bumps were mad
   - Verified 11 visible/code occurrences of `Dorj Agent`, no legacy product names/colors, and the
     copied wordmark/favicon assets.
 - Evidence: `tasks/T2-evidence/t2-item5-download-index.html`
+
+## Item 6 — Agent identity
+
+- Status: **DONE (static verification; full identity e2e intentionally not run)**
+- Files:
+  - `agent-server/SOUL.md`
+  - `agent-server/nova_server_patches/__init__.py`
+  - `e2e/identity.spec.js`
+  - `k8s-deploy/scripts/140-deploy-nova.sh`
+- Implementation:
+  - Product SOUL and runtime identity constants now define the English name **Dorj Agent** and the
+    formal Persian name **«دستیار دُرج»**.
+  - The runtime self-documentation and customer-machine prompt use the same product identity.
+  - The identity e2e now checks the English reply for `Dorj Agent`, the Persian reply for
+    «دستیار دُرج», and rejects `OpenHands`/`NovaAgent`.
+  - Deployment no longer copies upstream's old `SOUL.md` over the staged product identity.
+- Verification:
+  - `python3 -m py_compile agent-server/nova_server_patches/__init__.py`
+  - `bash -n k8s-deploy/scripts/140-deploy-nova.sh`
+  - Static checks confirmed the new names in SOUL, runtime constants, and e2e; user-facing runtime
+    identity strings contain no old product name.

@@ -1,7 +1,7 @@
-"""NovaAgent server-side behaviour for agent-servers whose tools run on the customer's PC.
+"""Dorj Agent server-side behaviour for agent-servers whose tools run on the customer's PC.
 
 Loaded with ``agent-server --import-modules sidecar_bridge,nova_server_patches``. Re-implements, as
-runtime wrappers around the stock 1.38.0 package, what NovaAgent's
+runtime wrappers around the stock 1.38.0 package, what Dorj Agent's
 scripts/patches/conversation_{router,service}-custhome.patch did by editing site-packages:
 
 1. A new conversation's working_dir must lie under one of the roots the customer's Local Tools
@@ -21,14 +21,14 @@ scripts/patches/conversation_{router,service}-custhome.patch did by editing site
    Likewise the terminal/glob/grep tool definitions refuse a working_dir that is not a directory
    *on the server*; for a bridged customer path that check is answered as "yes" (the terminal's
    commands run on the customer's PC through sidecar_bridge).
-4. The NovaAgent UI's company-managed LLM profile points at the public ``https://<host>/llmapi``
+4. The Dorj Agent UI's company-managed LLM profile points at the public ``https://<host>/llmapi``
    (what the customer's app can reach). Inside the cluster the same calls go straight to the
    internal LiteLLM (NOVA_LLM_PUBLIC_BASE -> NOVA_LLM_INTERNAL_BASE), same per-user key.
-7. Identity: the agent is NovaAgent, not "OpenHands agent". NovaAgent's own identity file
+7. Identity: the agent is Dorj Agent, not "OpenHands agent". Dorj Agent's own identity file
    (scripts/deploy/SOUL.md, baked at /opt/nova/SOUL.md - ~/.openhands is the user's PVC) is the
    SOUL, and the self-documentation block (which pointed at OpenHands docs/products) describes
-   NovaAgent instead.
-6. The agent is told which machine it really works on: the customer's sidecar hello (NovaAgent
+   Dorj Agent instead.
+6. The agent is told which machine it really works on: the customer's sidecar hello (Dorj Agent
    client overlay) reports OS, home, shell and installed runtimes; it is appended to the agent's
    system prompt (<USER_MACHINE>) for every new conversation.
 5. Our models do not all accept every reasoning_effort (qwen3 on vLLM rejects "high", the SDK
@@ -90,7 +90,7 @@ def customer_system_prompt() -> str:
     runtimes = sysinfo.get("runtimes") if isinstance(sysinfo.get("runtimes"), dict) else {}
     lines = [
         "<USER_MACHINE>",
-        "All your file and terminal tools run on the user's own computer (through the NovaAgent app), "
+        "All your file and terminal tools run on the user's own computer (through the Dorj Agent app), "
         "not on a server. Work with this machine's OS, paths, shell and installed tools:",
         f"- OS: {plat} - {sysinfo.get('os') or ''} (release {sysinfo.get('release') or '?'}, {sysinfo.get('arch') or '?'})",
         f"- User: {sysinfo.get('user') or '?'} on host {sysinfo.get('hostname') or '?'}; home: {sysinfo.get('home') or '?'}",
@@ -160,13 +160,15 @@ def internal_llm_base(base: str | None) -> str | None:
     return base
 
 
-NOVA_SOUL = ("You are NovaAgent, an intelligent AI assistant for coding and system tasks, made by NovaAgent. "
-             "Always present yourself with the exact name \"NovaAgent\" in Latin script.")
+NOVA_SOUL = ("You are Dorj Agent, an intelligent AI assistant for coding and system tasks. "
+             "Your English name is exactly \"Dorj Agent\" and your formal Persian name is exactly "
+             "\"دستیار دُرج\". Never replace your name with another product, framework, or internal name.")
 NOVA_SELF_DOC = """<SELF_DOCUMENTATION>
-When the user asks who you are, what you can do, or how to use this product: you are NovaAgent.
-Answer from what you know about NovaAgent and do not refer to any other product, vendor, framework
-or website, and never mention internal component names. NovaAgent:
-- runs in the NovaAgent desktop app (Windows, Linux) and works directly on the user's own computer:
+When the user asks who you are, what you can do, or how to use this product: you are Dorj Agent
+(«دستیار دُرج» in Persian). Use "Dorj Agent" for English replies and «دستیار دُرج» for Persian
+replies. Answer from what you know about Dorj Agent and do not refer to any other product, vendor,
+framework or website, and never mention internal component names. Dorj Agent:
+- runs in the Dorj Agent desktop app (Windows, Linux) and works directly on the user's own computer:
   their folders, files, terminal and installed tools (see <USER_MACHINE> when present);
 - plans, writes and edits code across many files, runs builds and tests and fixes until they pass,
   uses git (commits, branches, review-ready changes), and keeps a task list for longer work;

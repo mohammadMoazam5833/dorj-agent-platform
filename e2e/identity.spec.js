@@ -1,5 +1,5 @@
-// The agent presents itself as NovaAgent (NovaAgent's SOUL.md + self-documentation), never as the
-// upstream framework - asked in English and in Persian, through the real API with a real model.
+// The agent presents itself as Dorj Agent («دستیار دُرج») from SOUL.md + self-documentation,
+// never as the upstream framework - asked in English and in Persian through the real API.
 import { test, expect } from '@playwright/test'
 
 const N = 'https://nova.isigpu.local'
@@ -30,17 +30,20 @@ async function ask(page, token, text) {
   }, [token, text])
 }
 
-test('agent identity is NovaAgent (en + fa)', async ({ page }) => {
+test('agent identity is Dorj Agent (en + fa)', async ({ page }) => {
   test.setTimeout(400_000)
   await page.goto(N + '/download/')
   const login = await page.evaluate(async ([u, p]) => (await (await fetch('/api/auth/login', { method: 'POST',
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) })).json()),
   [process.env.E2E_USER, process.env.E2E_PASS])
-  for (const q of ['Who are you, and which product or framework are you? Answer in two sentences without using any tools.',
-                   'تو کی هستی و بر پایه‌ی چه محصولی ساخته شده‌ای؟ بدون استفاده از ابزار، در دو جمله جواب بده.']) {
+  for (const [q, name] of [
+    ['Who are you, and which product or framework are you? Answer in two sentences without using any tools.', 'Dorj Agent'],
+    ['تو کی هستی و بر پایه‌ی چه محصولی ساخته شده‌ای؟ بدون استفاده از ابزار، در دو جمله جواب بده.', 'دستیار دُرج'],
+  ] as const) {
     const reply = await ask(page, login.token, q)
     console.log('Q:', q.slice(0, 40), '\nA:', reply.slice(0, 300))
-    expect(reply).toContain('NovaAgent')
+    expect(reply).toContain(name)
     expect(reply.toLowerCase()).not.toContain('openhands')
+    expect(reply.toLowerCase()).not.toContain('novaagent')
   }
 })
