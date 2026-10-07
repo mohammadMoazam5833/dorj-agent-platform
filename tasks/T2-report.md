@@ -1,7 +1,7 @@
 # T2 Report — Dorj Agent rebrand
 
 - Date: 2026-10-07
-- Status: **CHECKPOINT 1 — STOPPED for CTO design review**
+- Status: **CHECKPOINT 1 APPROVED — CTO fixes applied; proceeding to items 3–11 (no deploy yet)**
 - Scope completed: item 1 (desktop icon) and item 2 (login prompt + loading)
 - Rule compliance: no Keycloak/theme redeploy, no Keycloak restart, no GLM/vLLM restart, no PVC/data deletion, no git push, no deployment, no tag.
 - `identity.spec.js` was not changed in this checkpoint.
@@ -61,8 +61,16 @@
   - Overlay applied successfully to a temporary staged copy of current NovaAgent HEAD.
   - Local Chrome render check: title `Dorj Agent`; Farsi heading `ورود به دستیار دُرج`; translated loading status; all brand images loaded.
 - Evidence:
-  - `tasks/T2-evidence/t2-item2-login.png`
-  - `tasks/T2-evidence/t2-item2-loading.png`
+  - `tasks/T2-evidence/t2-item2-login-1x.png`
+  - `tasks/T2-evidence/t2-item2-login-2x.png`
+  - `tasks/T2-evidence/t2-item2-loading-1x.png`
+  - `tasks/T2-evidence/t2-item2-loading-2x.png`
+- CTO checkpoint-1 review fixes:
+  - Login language switcher moved into a separate top bar, clear of the heading and subtitle.
+  - Login geometry checked at 1x and 2x: no overlap, no clipped/overflowing content.
+  - Loading screen now shows only the Dorj wordmark (no duplicate D-mark); vertical spacing and
+    collapsed splash height reduced.
+  - Desktop icons regenerated without the thin cream/gold border, using the navy rounded square.
 
 ## Remaining T2 items
 

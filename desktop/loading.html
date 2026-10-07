@@ -19,18 +19,13 @@
   body { color: var(--on-dark); font-family: 'Vazirmatn', 'Segoe UI', Tahoma, system-ui, sans-serif; padding: 10px; overflow: hidden;
          background: radial-gradient(120% 120% at 100% 0%, #2a4585 0%, #1b3266 42%, #10204a 100%);
          user-select: none; -webkit-app-region: drag; }
-  .shell { height: 100%; display: flex; flex-direction: column; border-radius: 18px; border: 1px solid var(--line);
+  .shell { height: 100%; display: flex; flex-direction: column; justify-content: space-between; border-radius: 18px; border: 1px solid var(--line);
            background: linear-gradient(160deg, rgba(16,30,72,.72) 0%, rgba(8,16,38,.66) 100%);
            box-shadow: rgba(0,0,0,.42) 0 30px 70px -40px; overflow: hidden; }
-  .top { padding: 24px 24px 0; display: flex; align-items: center; gap: 16px; }
-  .mark { width: 46px; height: auto; flex-shrink: 0; transform-origin: 50% 60%;
-          filter: drop-shadow(1px 1px 0 #d4defa) drop-shadow(1px 1px 0 #b3c4f2) drop-shadow(1px 1px 0 #93aaea)
-                  drop-shadow(0 14px 22px rgba(12,30,90,.6)) drop-shadow(0 0 22px rgba(110,150,255,.32));
-          animation: float 5.5s ease-in-out infinite; }
-  @keyframes float { 0%,100% { transform: translateY(0) rotateY(-14deg) rotateX(5deg); } 50% { transform: translateY(-7px) rotateY(10deg) rotateX(-3deg); } }
-  .wordmark { width: 108px; height: 36px; display: block; }
+  .top { padding: 24px 24px 0; }
+  .wordmark { width: 112px; height: 37px; display: block; }
   .tagline { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
-  .body { padding: 20px 24px 0; }
+  .body { padding: 16px 24px 0; }
   .status { margin: 0 0 12px; font-size: 14px; font-weight: 600; min-height: 22px; }
   .bar { position: relative; height: 4px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; }
   .bar::before { content: ""; position: absolute; inset: 0; width: 38%; border-radius: 4px;
@@ -50,7 +45,7 @@
   .log-line { white-space: pre-wrap; word-break: break-all; }
   .log-line-error { color: var(--err); }
   .log-name { color: var(--gold-soft); }
-  .foot { margin-top: auto; padding: 14px 18px 16px; display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line);
+  .foot { padding: 12px 18px 14px; display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line);
           background: rgba(0,0,0,.12); -webkit-app-region: no-drag; }
   .spacer { flex: 1; }
   button { font: 600 12.5px 'Vazirmatn', 'Segoe UI', sans-serif; color: var(--on-dark); background: rgba(255,255,255,.06);
@@ -61,13 +56,12 @@
   .copy { display: none; }
   body.details .copy { display: inline-block; }
   .lang { color: var(--muted); }
-  @media (prefers-reduced-motion: reduce) { .mark, .bar::before { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .bar::before { animation: none; } }
 </style>
 </head>
 <body>
   <main class="shell">
     <div class="top">
-      <img class="mark" src="brand/dorj-d.png" alt="" />
       <div>
         <img class="wordmark" src="brand/dorj-wordmark.png" alt="Dorj Agent" />
         <p class="tagline" data-t="tagline"></p>

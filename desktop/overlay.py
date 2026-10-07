@@ -207,6 +207,14 @@ function installNovaMenu() {
         '    const loginWin = new BrowserWindow({\n      width: 520,\n      height: 480,',
         '    const loginWin = new BrowserWindow({\n      width: 920,\n      height: 600,',
     ),
+    (  # 11: the redesigned splash is compact; expanded mode still reveals the startup log
+        'const LOADING_WIN_HEIGHT = 360;\nconst LOADING_WIN_EXPANDED_HEIGHT = 560;',
+        'const LOADING_WIN_HEIGHT = 300;\nconst LOADING_WIN_EXPANDED_HEIGHT = 540;',
+    ),
+    (  # match the new Dorj navy pre-paint color
+        '    backgroundColor: "#0b0e14",',
+        '    backgroundColor: "#0B1B3A",',
+    ),
     (  # 1c + 3 + 4: before the thin client decides whether to prompt for sign-in
         '    if (!readWorkspaceTokenFromConfig()) {\n      suppressQuitOnAllWindowsClosed = true;',
         '''    await trustOrgCa(remoteUiUrl);
