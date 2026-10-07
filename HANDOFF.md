@@ -141,6 +141,15 @@ Effect, verified by a dry run on 2026-10-07:
 - **Gateway:** `patch_gateway.py` still applies and is still needed. The upstream gateway still closes a replaced session without 4001 and still has the shared-id cross-tenant mix-up. `ws_close_codes.py` fails there too.
 - **Result:** `140-deploy-nova.sh --rebuild`, or any client/gateway rebuild, stops until the patches are reconciled. The live system is unaffected.
 
+> **In progress (2026-10-07 ~16:00):** someone is already reconciling this. These files have
+> **uncommitted** changes in the working tree:
+> - `desktop/overlay.py`
+> - `desktop/build-client.sh`
+> - `download/render.py`
+> - `patches/ws_close_codes.py` (now a no-op for 1.6.6+)
+>
+> Coordinate with that person before touching them, and re-run the full e2e table before committing.
+
 What to do:
 1. **Branding:** confirm with the owner whether the product name is now "Dorj Agent" (memory says Nova is a product separate from Dorj — the rebrand may reverse that). It affects:
    - the `login-prompt.html` / `loading.html` texts;
