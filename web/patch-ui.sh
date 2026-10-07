@@ -4,8 +4,9 @@
 #    leaves the page blank until the request fails on an air-gapped network.
 # 2. Apply the platform.isigpu.local brand: platform D mark, favicon, product title, and manifest.
 set -euo pipefail
+# Resolve before the cd (BASH_SOURCE may be relative) and export it: the node block below reads it.
+export SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${1:?usage: patch-ui.sh <ui-source-dir>}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ ! -d node_modules/@fontsource-variable/outfit ] || [ ! -d node_modules/@fontsource/ibm-plex-mono ]; then
   npm install --no-save --no-audit --no-fund @fontsource-variable/outfit@5 @fontsource/ibm-plex-mono@5
 fi
