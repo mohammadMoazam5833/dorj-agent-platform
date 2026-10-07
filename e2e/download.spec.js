@@ -1,4 +1,4 @@
-// Public download page (no sign-in): links resolve, sizes match SHA256SUMS entries, checksums verify.
+// Dorj Agent public download page (no sign-in): links resolve, sizes match SHA256SUMS entries, checksums verify.
 import { test, expect } from '@playwright/test'
 
 const N = 'https://nova.isigpu.local'
@@ -7,8 +7,11 @@ test('download page: public, every artifact listed in SHA256SUMS and intact', as
   const res = await page.goto(N + '/download/')
   expect(res.status()).toBe(200)
   expect(new URL(page.url()).pathname).toBe('/download/')            // not bounced to the realm login
-  await expect(page.locator('#dl-main')).toHaveAttribute('href', /(?:Dorj-Agent-Client|NovaAgent)-(Setup-[\d.]+(?:\+nova\.\d+)?-x64\.exe|[\d.]+(?:\+nova\.\d+)?-amd64\.deb|[\d.]+(?:\+nova\.\d+)?-x86_64\.AppImage)$/)
+  await expect(page.locator('#dl-main')).toHaveAttribute('href', /Dorj-Agent-Client-(Setup-[\d.]+(?:\+nova\.\d+)?-x64\.exe|[\d.]+(?:\+nova\.\d+)?-amd64\.deb|[\d.]+(?:\+nova\.\d+)?-x86_64\.AppImage)$/)
   expect(await page.content()).not.toContain('{{')
+  const brand = await page.evaluate(() => ({ title: document.title, text: document.body.innerText }))
+  expect(`${brand.title}\n${brand.text}`, 'download page branding').toMatch(/Dorj Agent|دستیار دُرج/i)
+  expect(`${brand.title}\n${brand.text}`, 'download page must not expose old branding').not.toMatch(/NovaAgent|OpenHands/i)
   const fontOk = await page.evaluate(async () => { await document.fonts.ready; return document.fonts.check('16px Vazirmatn', 'سلام') })
   expect(fontOk).toBe(true)
   await page.screenshot({ path: process.env.NOVA_DL_SHOT || 'nova-download.png', fullPage: false })

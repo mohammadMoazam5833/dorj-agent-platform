@@ -1,4 +1,4 @@
-// NovaAgent server edge (nova-control) as the desktop app and its customers meet it: no web product
+// Dorj Agent server edge (nova-control) as the desktop app and its customers meet it: no web product
 // (browsers land on /download/), sign-in contract, tenant token isolation, no forged identities,
 // the UI bundle with the company LLM preconfigured, /llmapi limited to model endpoints.
 import { test, expect } from '@playwright/test'
@@ -18,7 +18,7 @@ test('server edge: no web product, sign-in, token isolation, preconfigured LLM',
   await page.goto(N + '/')
   expect(new URL(page.url()).pathname).toBe('/download/')
 
-  // sign-in contract (NovaAgent electron/main.mjs loginToWorkspaceServer)
+  // sign-in contract (Dorj Agent electron/main.mjs loginToWorkspaceServer)
   const bad = await post(page, '/api/auth/login', { username: process.env.E2E_USER, password: 'wrong' })
   expect(bad.status).toBe(401)
   expect(bad.json.ok).toBe(false)

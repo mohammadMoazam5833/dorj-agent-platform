@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Capacity check for N concurrent customers (default 30) on the live NovaAgent deployment, without
-# touching the shared LLM: N synthetic tenants, N simulated customer PCs (NovaAgent's own
+# Capacity check for N concurrent customers (default 30) on the live Dorj Agent deployment, without
+# touching the shared LLM: N synthetic tenants, N simulated customer PCs (Dorj Agent's own
 # local-tools-sidecar + reverse tunnel client, one folder each), N agent-server workspaces cold-started
 # at once, then for every tenant a conversation start that must be bridged to *that* tenant's PC
 # (working_dir remapped to its own folder) - proving routing and isolation per customer.

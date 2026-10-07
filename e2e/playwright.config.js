@@ -1,4 +1,4 @@
-// NovaAgent live e2e against https://nova.isigpu.local (system Chrome, internal CA ignored).
+// Dorj Agent live e2e against https://nova.isigpu.local (system Chrome, internal CA ignored).
 import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: '.',

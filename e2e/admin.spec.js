@@ -1,4 +1,4 @@
-// NovaAgent admin panel (NovaAgent's own nova-admin UI, served by nova-control on Kubernetes):
+// Dorj Agent admin panel (Dorj Agent's nova-admin UI, served by nova-control on Kubernetes):
 // organisation sign-in (group nova-admins), dashboard services, users with their workspace +
 // connected app, conversations, logs, LLM status; wrong password refused; API closed without session.
 import { test, expect } from '@playwright/test'

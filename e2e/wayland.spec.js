@@ -9,7 +9,7 @@
 import { test, expect, _electron as electron } from '@playwright/test'
 import path from 'node:path'
 
-const BIN = process.env.NOVA_DESKTOP_BIN || '/opt/NovaAgent/novaagent-client'
+const BIN = process.env.NOVA_DESKTOP_BIN || '/usr/bin/dorj-agent-client'
 const SHOTS = process.env.NOVA_SHOTS || '.'
 const EXPECT_STUCK = process.env.NOVA_EXPECT === 'stuck'
 

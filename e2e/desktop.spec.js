@@ -1,14 +1,14 @@
-// NovaAgent desktop client, end to end as a customer uses it: the installed .deb (NovaAgent's own thin
+// Dorj Agent desktop client, end to end as a customer uses it: the installed .deb (Dorj Agent thin
 // client + overlay) starts, the sign-in window authenticates against realm nova, the app opens the
 // server UI, starts its Local Tools Sidecar + reverse tunnel, and the agent creates a file on *this*
 // machine's disk. Runs inside an Ubuntu container under Xvfb (see e2e/run-desktop.sh).
-// Needs: E2E_USER/E2E_PASS, NOVA_DESKTOP_BIN (default /opt/NovaAgent/novaagent-client).
+// Needs: E2E_USER/E2E_PASS, NOVA_DESKTOP_BIN (default /usr/bin/dorj-agent-client).
 import { test, expect, _electron as electron } from '@playwright/test'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
-const BIN = process.env.NOVA_DESKTOP_BIN || '/opt/NovaAgent/novaagent-client'
+const BIN = process.env.NOVA_DESKTOP_BIN || '/usr/bin/dorj-agent-client'
 const SHOTS = process.env.NOVA_SHOTS || '.'
 const PROOF = path.join(homedir(), 'nova_desktop_e2e.txt')
 

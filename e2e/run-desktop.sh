@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 SHOTS=$(realpath "${1:-.}")
-DEB=$(ls ../desktop/dist/Dorj-Agent-Client-*-amd64.deb ../desktop/dist/NovaAgent-*-amd64.deb 2>/dev/null | tail -1 || true)
+DEB=$(ls ../desktop/dist/Dorj-Agent-Client-*-amd64.deb ../desktop/dist/NovaAgent-*-amd64.deb 2>/dev/null | tail -1 || true) # legacy fallback
 if [[ -z "$DEB" ]]; then
   echo "No Dorj-Agent-Client-*-amd64.deb or NovaAgent-*-amd64.deb found in ../desktop/dist" >&2
   exit 1
