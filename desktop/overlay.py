@@ -487,6 +487,28 @@ export function describeSystem() {
 }
 ''')
 
+# Brand assets are copied from the repository source of truth. These anchors are asserted so an
+# upstream electron-builder rename cannot silently ship the old NovaAgent icon assets.
+thin_cfg = (stage / "electron-builder.thin.config.mjs").read_text(encoding="utf-8")
+for anchor in ('    icon: "icon.ico",', '    icon: "icons",', '        Icon: "dorj-agent",'):
+    if anchor not in thin_cfg:
+        sys.exit(f"overlay: icon anchor not found in electron-builder.thin.config.mjs: {anchor!r}")
+
+brand_dir = overlay / "brand"
+brand_target = stage / "electron/brand"
+brand_target.mkdir(parents=True, exist_ok=True)
+for f in ("dorj-d.png", "dorj-wordmark.png", "dorj-agent-favicon.png"):
+    if not (brand_dir / f).is_file():
+        sys.exit(f"overlay: brand asset missing: {f}")
+    shutil.copy(brand_dir / f, brand_target / f)
+build_resources = stage / "electron/build-resources"
+build_resources.mkdir(parents=True, exist_ok=True)
+shutil.copy(brand_dir / "desktop/dorj-agent.png", build_resources / "icon.png")
+shutil.copy(brand_dir / "desktop/dorj-agent.ico", build_resources / "icon.ico")
+shutil.rmtree(build_resources / "icons", ignore_errors=True)  # prevent legacy icon sizes persisting
+shutil.copytree(brand_dir / "linux", build_resources / "icons")
+(build_resources / "novaagent.png").unlink(missing_ok=True)
+
 shutil.copy(overlay / "login-prompt.html", stage / "electron/login-prompt.html")
 shutil.copy(overlay / "loading.html", stage / "electron/loading.html")
 shutil.copy(overlay / "org-root-ca.crt", stage / "electron/org-root-ca.crt")
@@ -494,7 +516,7 @@ for f in ("vazirmatn-400.woff2", "vazirmatn-600.woff2"):
     shutil.copy(overlay / f, stage / "electron" / f)
 
 edit("electron-builder.thin.config.mjs", [
-    ('    "login-prompt.html",\n', '    "login-prompt.html",\n    "org-root-ca.crt",\n    "vazirmatn-400.woff2",\n    "vazirmatn-600.woff2",\n'),
+    ('    "login-prompt.html",\n', '    "login-prompt.html",\n    "org-root-ca.crt",\n    "vazirmatn-400.woff2",\n    "vazirmatn-600.woff2",\n    "brand/dorj-d.png",\n    "brand/dorj-wordmark.png",\n    "brand/dorj-agent-favicon.png",\n'),
 ])
 thin = (stage / "electron-builder.thin.config.mjs").read_text(encoding="utf-8")
 n = thin.count('      "--disable-gpu",\n    ],')
