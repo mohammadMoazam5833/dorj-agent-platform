@@ -7,7 +7,7 @@ test('download page: public, every artifact listed in SHA256SUMS and intact', as
   const res = await page.goto(N + '/download/')
   expect(res.status()).toBe(200)
   expect(new URL(page.url()).pathname).toBe('/download/')            // not bounced to the realm login
-  await expect(page.locator('#dl-main')).toHaveAttribute('href', /NovaAgent-(Setup-[\d.]+(?:\+nova\.\d+)?-x64\.exe|[\d.]+(?:\+nova\.\d+)?-amd64\.deb|[\d.]+(?:\+nova\.\d+)?-x86_64\.AppImage)$/)
+  await expect(page.locator('#dl-main')).toHaveAttribute('href', /(?:Dorj-Agent-Client|NovaAgent)-(Setup-[\d.]+(?:\+nova\.\d+)?-x64\.exe|[\d.]+(?:\+nova\.\d+)?-amd64\.deb|[\d.]+(?:\+nova\.\d+)?-x86_64\.AppImage)$/)
   expect(await page.content()).not.toContain('{{')
   const fontOk = await page.evaluate(async () => { await document.fonts.ready; return document.fonts.check('16px Vazirmatn', 'سلام') })
   expect(fontOk).toBe(true)

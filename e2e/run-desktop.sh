@@ -5,7 +5,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 SHOTS=$(realpath "${1:-.}")
-DEB=$(ls ../desktop/dist/NovaAgent-*-amd64.deb | tail -1)
+DEB=$(ls ../desktop/dist/Dorj-Agent-Client-*-amd64.deb ../desktop/dist/NovaAgent-*-amd64.deb 2>/dev/null | tail -1 || true)
+if [[ -z "$DEB" ]]; then
+  echo "No Dorj-Agent-Client-*-amd64.deb or NovaAgent-*-amd64.deb found in ../desktop/dist" >&2
+  exit 1
+fi
 IP=${NOVA_INGRESS_IP:-172.16.50.202}
 # /dev/shm read-only: emulates guests where Chromium cannot create shared memory there (VMware Ubuntu
 # report 2026-10-05) - the packaged app must start anyway (--disable-dev-shm-usage)

@@ -4,7 +4,12 @@
 #   NOVA_EXPECT=stuck, NOVAAGENT_TEST_IGNORE_READY_TO_SHOW=1)
 set -euo pipefail
 cd "$(dirname "$0")"
-DEB=$(realpath "${1:-$(ls ../desktop/dist/NovaAgent-*-amd64.deb | tail -1)}")
+DEFAULT_DEB=$(ls ../desktop/dist/Dorj-Agent-Client-*-amd64.deb ../desktop/dist/NovaAgent-*-amd64.deb 2>/dev/null | tail -1 || true)
+if [[ -z "$DEFAULT_DEB" ]]; then
+  echo "No Dorj-Agent-Client-*-amd64.deb or NovaAgent-*-amd64.deb found in ../desktop/dist" >&2
+  exit 1
+fi
+DEB=$(realpath "${1:-$DEFAULT_DEB}")
 SHOTS=$(realpath "${2:-.}")
 IP=${NOVA_INGRESS_IP:-172.16.50.202}
 docker run --rm --tmpfs /dev/shm:ro,size=1m -e HTTPS_PROXY -e HTTP_PROXY -e E2E_USER -e E2E_PASS \
