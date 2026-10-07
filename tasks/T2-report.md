@@ -164,3 +164,19 @@ No `NOVA_CLIENT_REV`, control, agent-server, or download revision bumps were mad
   - `bash -n k8s-deploy/scripts/140-deploy-nova.sh`
   - Static checks confirmed the new names in SOUL, runtime constants, and e2e; user-facing runtime
     identity strings contain no old product name.
+
+## Item 7 — Keycloak realm `nova`
+
+- Status: **DONE (idempotent realm setup executed; no restart/theme redeploy)**
+- Files:
+  - `k8s-deploy/scripts/141-setup-nova-realm.sh`
+- Implementation:
+  - Realm display name is now `Dorj Agent`; HTML display is `<b>D</b>orj Agent`.
+  - Client display names are now `Dorj Agent Web`, `Dorj Agent CLI`, and `Dorj Agent sign-in`.
+  - Internal IDs (`nova`, `nova-web`, `nova-cli`, `nova-desktop`) are intentionally unchanged.
+  - The realm frame remains the existing `nova` theme. The platform `dorj-v3` theme was not switched
+    because its documentation/contact panel is platform-specific rather than product-neutral.
+- Verification:
+  - `bash -n scripts/141-setup-nova-realm.sh`
+  - Ran the idempotent script successfully; it reported a successful read-only LDAP sync and no
+    Keycloak restart/theme redeploy. Credentials were not printed or stored in evidence.
