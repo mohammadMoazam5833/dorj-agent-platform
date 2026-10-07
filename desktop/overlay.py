@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Apply the NovaAgent-on-Kubernetes overlay to a staged copy of the NovaAgent source (electron/).
+"""Apply the Dorj Agent-on-Kubernetes overlay to a staged copy of the Dorj Agent source (electron/).
 
-The NovaAgent Client (thin Electron client, electron-builder.thin.config.mjs) is built from the
-NovaAgent repo as-is, plus these small, explicit changes. Each edit asserts its anchor so an
+The Dorj Agent Client (thin Electron client, electron-builder.thin.config.mjs) is built from the
+Dorj Agent repo as-is, plus these small, explicit changes. Each edit asserts its anchor so an
 upstream change fails the build loudly instead of silently shipping an unpatched client.
 
   1. Trust the organisation's root CA (bundled as electron/org-root-ca.crt) - for the company
@@ -31,7 +31,7 @@ upstream change fails the build loudly instead of silently shipping an unpatched
      check has a timeout; no stale VM address in company-llm.json.
  11. Redesigned splash (loading.html): everything in one card, fa/en, same IPC contract.
 
-Usage: overlay.py <staged NovaAgent dir> <overlay dir (this desktop/ folder)>
+Usage: overlay.py <staged Dorj Agent dir> <overlay dir (this desktop/ folder)>
 """
 import pathlib
 import shutil
@@ -60,7 +60,7 @@ main_edits = [
         'const __dirname = dirname(__filename);\n',
         '''const __dirname = dirname(__filename);
 
-// ── NovaAgent on Kubernetes overlay (nova-platform/desktop/overlay.py) ──────────────────────────
+// ── Dorj Agent on Kubernetes overlay (nova-platform/desktop/overlay.py) ──────────────────────────
 const ORG_CA_PATH = join(__dirname, "org-root-ca.crt");
 if (existsSync(ORG_CA_PATH) && !process.env.NODE_EXTRA_CA_CERTS) {
   process.env.NODE_EXTRA_CA_CERTS = ORG_CA_PATH; // sidecar + reverse tunnel children
@@ -110,6 +110,7 @@ function forgetWorkspaceToken() {
     const { userConfigPath } = getThinClientConfigPaths();
     const cfg = JSON.parse(readFileSync(userConfigPath, "utf8"));
     delete cfg.workspaceToken;
+    delete cfg.workspaceTokenEncrypted;
     writeFileSync(userConfigPath, `${JSON.stringify(cfg, null, 2)}\\n`, "utf8");
   } catch {
     // nothing stored
@@ -140,8 +141,8 @@ async function showAccountInUseElsewhere(remoteUiUrl) {
     const parent = [mainWin, loadingWin].find((x) => x && !x.isDestroyed()) || undefined;
     const { response } = await dialog.showMessageBox(parent, {
       type: "warning",
-      title: "NovaAgent",
-      message: "این حساب در رایانه‌ی دیگری باز است.\\nThis NovaAgent account is open on another computer.",
+      title: "Dorj Agent",
+      message: "این حساب در رایانه‌ی دیگری باز است.\\nThis Dorj Agent account is open on another computer.",
       detail:
         "تا وقتی آن‌جا باز است، دستیار به فایل‌های این رایانه دسترسی ندارد. با «استفاده در این رایانه» اتصال به این‌جا منتقل می‌شود.\\n\\n" +
         "While it is open there, the assistant cannot work on this computer's files. «Use it here» moves the connection to this computer.",
@@ -160,9 +161,9 @@ function showSidecarPortInUse() {
   const parent = [mainWin, loadingWin].find((x) => x && !x.isDestroyed()) || undefined;
   dialog.showMessageBox(parent, {
     type: "error",
-    title: "NovaAgent",
-    message: "پورت محلی NovaAgent (18765) در اختیار برنامه‌ی دیگری است.\\nNovaAgent's local port (18765) is in use by another program.",
-    detail: "برنامه‌ی دیگر را ببندید و NovaAgent را دوباره باز کنید.\\nClose the other program and restart NovaAgent.",
+    title: "Dorj Agent",
+    message: "پورت محلی Dorj Agent (18765) در اختیار برنامه‌ی دیگری است.\\nDorj Agent's local port (18765) is in use by another program.",
+    detail: "برنامه‌ی دیگر را ببندید و Dorj Agent را دوباره باز کنید.\\nClose the other program and restart Dorj Agent.",
     buttons: ["OK"],
     noLink: true,
   });
@@ -174,7 +175,7 @@ function installNovaMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),
     {
-      label: "NovaAgent",
+      label: "Dorj Agent",
       submenu: [
         {
           label: t("Sign out", "\\u062e\\u0631\\u0648\\u062c \\u0627\\u0632 \\u062d\\u0633\\u0627\\u0628"),
@@ -322,14 +323,26 @@ edit("scripts/customer-workspace/client.mjs", [
       session = await connectWebSocket(options.gatewayWsUrl, {""",
     ),
     (
-        """        onClose: () => {
+        """        onClose: (info) => {
           stopPinging();
           session = null;
+          // 4001/session_replaced means the same account was opened elsewhere.
+          // Retrying immediately turns that deliberate eviction into reconnect
+          // churn, with each old client fighting the new session.
+          if (info?.code === 4001) {
+            closed = true;
+            log(
+              "[customer-workspace-client] session replaced on the gateway; stopped reconnecting",
+            );
+            return;
+          }
           if (!closed && reconnect) scheduleReconnect();
         },
       });""",
-        """        onClose: (code, reason) => {
-          log(`[customer-workspace-client] closed: code=${code} reason=${reason || "-"}`);
+        """        onClose: (info) => {
+          const code = info?.code;
+          const reason = info?.reason || "";
+          log(`[customer-workspace-client] closed: code=${code || 1006} reason=${reason || "-"}`);
           if (session && mine && session !== mine) return; // stale socket of a replaced connection
           stopPinging();
           session = null;
@@ -367,7 +380,7 @@ edit("scripts/local-tools-sidecar/server.mjs", [
         "    listen(cb) {\n"
         "      server.once(\"error\", (err) => {\n"
         "        if (err && err.code === \"EADDRINUSE\") {\n"
-        "          console.error(`[local-tools-sidecar] port ${options.host}:${options.port} is already in use (another NovaAgent or another program)`);\n"
+        "          console.error(`[local-tools-sidecar] port ${options.host}:${options.port} is already in use (another Dorj Agent or another program)`);\n"
         "          process.exit(4);\n"
         "        }\n"
         "        throw err;\n"
@@ -408,7 +421,7 @@ edit("scripts/local-tools-sidecar/handlers.mjs", [
 with open(stage / "scripts/local-tools-sidecar/handlers.mjs", "a", encoding="utf-8") as f:
     f.write(r'''
 
-// ── NovaAgent overlay: describe the customer's machine for the agent (cached) ──────────────────
+// ── Dorj Agent overlay: describe the customer's machine for the agent (cached) ──────────────────
 import * as novaOs from "node:os";
 import { execFileSync as novaExecFileSync } from "node:child_process";   // readFileSync/existsSync: imported above
 
@@ -482,12 +495,6 @@ for f in ("vazirmatn-400.woff2", "vazirmatn-600.woff2"):
 
 edit("electron-builder.thin.config.mjs", [
     ('    "login-prompt.html",\n', '    "login-prompt.html",\n    "org-root-ca.crt",\n    "vazirmatn-400.woff2",\n    "vazirmatn-600.woff2",\n'),
-    ('  productName: "NovaAgent Client",', '  productName: "NovaAgent",'),
-    ('    target: [\n      { target: "nsis", arch: ["x64"] },\n      { target: "zip", arch: ["x64"] },\n    ],',
-     '    target: [{ target: "nsis", arch: ["x64"] }],'),
-    ('    shortcutName: "NovaAgent Client",', '    shortcutName: "NovaAgent",'),
-    ('    artifactName: "NovaAgent-Client-Setup-${version}.${ext}",', '    artifactName: "NovaAgent-Setup-${version}-x64.${ext}",'),
-    ('    artifactName: "NovaAgent-Client-${version}-${arch}.${ext}",\n  },\n\n  deb:', '    artifactName: "NovaAgent-${version}-${arch}.${ext}",\n  },\n\n  deb:'),
 ])
 thin = (stage / "electron-builder.thin.config.mjs").read_text(encoding="utf-8")
 n = thin.count('      "--disable-gpu",\n    ],')

@@ -1,8 +1,8 @@
-"""Render NovaAgent's own download page (NovaAgent scripts/download-site/index.html) for this deployment
+"""Render Dorj Agent's own download page (Dorj Agent scripts/download-site/index.html) for this deployment
 and gather the files it links: the desktop client built by desktop/build-client.sh, the nova CLI wheel,
 the organisation root CA and SHA256SUMS.
 
-    python3 render.py <NovaAgent src> <out dir> <server URL>
+    python3 render.py <Dorj Agent src> <out dir> <server URL>
 
 Edits are pattern-based (file names, version, server address), so a newer upstream page keeps working;
 anything that no longer matches fails loudly.
@@ -18,8 +18,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 src, out, server = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3].rstrip("/")
 dist = ROOT / "desktop/dist"
 ver = (dist / "VERSION").read_text().strip()          # written by desktop/build-client.sh
-files = {"exe": f"NovaAgent-Setup-{ver}-x64.exe", "deb": f"NovaAgent-{ver}-amd64.deb",
-         "appimage": f"NovaAgent-{ver}-x86_64.AppImage"}
+files = {"exe": f"Dorj-Agent-Client-Setup-{ver}-x64.exe", "deb": f"Dorj-Agent-Client-{ver}-amd64.deb",
+         "appimage": f"Dorj-Agent-Client-{ver}-x86_64.AppImage"}
 out.mkdir(parents=True, exist_ok=True)
 for f in files.values():
     if not (dist / f).exists():
@@ -48,19 +48,18 @@ def sub(pattern, repl, *, required=True, count=0):
 
 
 ver_re = r"\d+\.\d+\.\d+(?:[-+]nova\.\d+)?"
-sub(rf"/nova/NovaAgent-Client-{ver_re}-Setup\.exe", files["exe"])
-sub(rf"/nova/NovaAgent-Client-{ver_re}-amd64\.deb", files["deb"])
-sub(rf"/nova/NovaAgent-Client-{ver_re}-x86_64\.AppImage", files["appimage"])
-sub(rf"sudo dpkg -i NovaAgent-Client-{ver_re}-amd64\.deb", f"sudo apt install ./{files['deb']}")
-sub(rf"NovaAgent-Client-{ver_re}-Setup\.exe", files["exe"])
-sub(rf"NovaAgent-Client-{ver_re}-x86_64\.AppImage", files["appimage"])
+sub(rf"/nova/Dorj-Agent-Client-(?:Setup-)?{ver_re}-x64\.exe", files["exe"])
+sub(rf"/nova/Dorj-Agent-Client-{ver_re}-win64\.zip", files["exe"], required=False)
+sub(rf"/nova/Dorj-Agent-Client-{ver_re}-amd64\.deb", files["deb"])
+sub(rf"/nova/Dorj-Agent-Client-{ver_re}-x86_64\.AppImage", files["appimage"])
+sub(rf"sudo (?:dpkg -i|apt install \./)\s*Dorj(?:-Agent)?-Client-{ver_re}-amd64\.deb", f"sudo apt install ./{files['deb']}")
+sub(rf"Dorj(?:-Agent)?-Client-(?:Setup-)?{ver_re}-x64\.exe", files["exe"])
+sub(rf"Dorj(?:-Agent)?-Client-{ver_re}-x86_64\.AppImage", files["appimage"])
 sub(rf"v{ver_re}", f"v{ver}")
 sub(rf'<b class="ltr">{ver_re}</b>', f'<b class="ltr">{ver}</b>')
-sub(r"\d+–\d+ MB", f"{min(sizes):.0f}–{max(sizes):.0f} MB")
-sub(r"\b\d{1,3}(?:\.\d{1,3}){3}:\d+\b", host)
-sub(r'کافی است فایل <code class="ltr">remote-client\.json</code>[^<]*<code[^>]*>[^<]*</code>|کافی است فایل <code class="ltr">remote-client\.json</code>[^<]*',
-    'از منوی <b>NovaAgent ← خروج از حساب</b> خارج شوید؛ برای سرور دیگر نسخه‌ی مخصوص آن سرور را از همان سرور دانلود کنید.',
-    required=False)
+sub(r"\d+[–-]\d+ MB", f"{min(sizes):.0f}–{max(sizes):.0f} MB")
+sub(r"\b\d{1,3}(?:\.\d{1,3}){3}:\d+\b", host, required=False)
+sub(r'از منوی <b>[^<]+</b> خارج شوید[^<]*', 'از منوی <b>Dorj Agent ← خروج از حساب</b> خارج شوید؛ برای سرور دیگر نسخه‌ی مخصوص آن سرور را از همان سرور دانلود کنید.', required=False)
 # self-hosted Vazirmatn (customers' machines need not reach Google Fonts)
 sub(r"<style>\n", "<style>\n@font-face{font-family:'Vazirmatn';src:url(vazirmatn-400.woff2) format('woff2');font-weight:400;font-display:swap}\n"
     "@font-face{font-family:'Vazirmatn';src:url(vazirmatn-600.woff2) format('woff2');font-weight:600 800;font-display:swap}\n", count=1)
@@ -73,4 +72,4 @@ assert "172.16.40.188" not in html
 (out / "index.html").write_text(html, encoding="utf-8")
 names = sorted(list(files.values()) + extras)
 (out / "SHA256SUMS").write_text("".join(f"{hashlib.sha256((out / n).read_bytes()).hexdigest()}  {n}\n" for n in names))
-print(f"rendered NovaAgent {ver} download page -> {out}")
+print(f"rendered Dorj Agent {ver} download page -> {out}")

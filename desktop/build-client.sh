@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build the NovaAgent desktop client (NovaAgent's own thin Electron client, electron-builder.thin.config.mjs)
-# from the NovaAgent source + overlay.py, with the company server URL baked in:
-#   desktop/build-client.sh <NovaAgent src> <server URL>
-#   -> desktop/dist/{NovaAgent-Setup-<v>-x64.exe, NovaAgent-<v>-amd64.deb, NovaAgent-<v>-x86_64.AppImage, SHA256SUMS, VERSION}
-#   <v> = NovaAgent's package.json version + "+nova.$NOVA_CLIENT_REV" (default 1)
+# Build the Dorj Agent desktop client (Dorj Agent thin Electron client, electron-builder.thin.config.mjs)
+# from the Dorj Agent source + overlay.py, with the company server URL baked in:
+#   desktop/build-client.sh <Dorj-Agent-Client src> <server URL>
+#   -> desktop/dist/{Dorj-Agent-Client-Setup-<v>-x64.exe, Dorj-Agent-Client-<v>-amd64.deb, Dorj-Agent-Client-<v>-x86_64.AppImage, SHA256SUMS, VERSION}
+#   <v> = Dorj-Agent-Client's package.json version + "+nova.$NOVA_CLIENT_REV" (default 1)
 # Runs in the electron-builder wine image (Windows icon/version editing on a Linux host).
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -15,7 +15,7 @@ cp -r "$SRC/electron" .stage/
 cp "$SRC"/electron-builder.config.mjs "$SRC"/electron-builder.thin.config.mjs .stage/
 for f in desktop-remote-url.mjs desktop-company-llm-url.mjs local-tools-sidecar.mjs customer-workspace-client.mjs \
          prepare-thin-remote-client.mjs local-tools-sidecar customer-workspace; do cp -r "$SRC/scripts/$f" .stage/scripts/; done
-REV=${NOVA_CLIENT_REV:-1}   # our package revision on top of NovaAgent's version: 1.6.5+nova.N
+REV=${NOVA_CLIENT_REV:-1}   # our package revision on top of the Dorj Agent version: 1.6.6+nova.N
 # ("+", not "-": electron-builder turns a semver pre-release "-" into a Debian "~", which sorts
 #  *below* 1.6.5 - apt would treat the fixed package as a downgrade)
 python3 - "$SRC/package.json" .stage/package.json "$REV" <<'PY'
@@ -23,8 +23,8 @@ import json, sys
 up = json.load(open(sys.argv[1]))
 up["version"] = f"{up['version']}+nova.{sys.argv[3]}"
 pick = lambda k: {n: (up.get("dependencies", {}) | up.get("devDependencies", {}))[n] for n in k}
-json.dump({"name": "novaagent", "version": up["version"], "private": True,
-           "description": "NovaAgent desktop client", "author": {"name": "NovaAgent", "email": "nova@isigpu.local"},
+json.dump({"name": "dorj-agent-client", "version": up["version"], "private": True,
+           "description": "Dorj Agent desktop client", "author": {"name": "Dorj Agent", "email": "client@isigpu.local"},
            "homepage": "https://nova.isigpu.local", "license": "MIT",
            "dependencies": pick(["sirv", "httpxy"]), "devDependencies": pick(["electron", "electron-builder"])},
           open(sys.argv[2], "w"), indent=2)
@@ -39,7 +39,7 @@ docker run --rm -e HTTPS_PROXY -e HTTP_PROXY -e https_proxy="${HTTPS_PROXY:-}" -
            node scripts/prepare-thin-remote-client.mjs
            npx electron-builder --config electron-builder.thin.config.mjs --linux deb AppImage --win nsis
            chown -R $(id -u):$(id -g) /project /cache"
-mkdir -p dist && cp .stage/dist-electron/NovaAgent-*.{exe,deb,AppImage} dist/
+mkdir -p dist && cp .stage/dist-electron/Dorj-Agent-Client-*.{exe,deb,AppImage} dist/
 python3 -c 'import json; print(json.load(open(".stage/package.json"))["version"])' > dist/VERSION
-(cd dist && sha256sum NovaAgent-* > SHA256SUMS)
+(cd dist && sha256sum Dorj-Agent-Client-* > SHA256SUMS)
 ls -la dist
