@@ -1,5 +1,5 @@
 {
- "title": "NovaAgent",
+ "title": "Dorj Agent",
  "uid": "nova-agent",
  "tags": [
   "nova"
@@ -259,7 +259,7 @@
   },
   {
    "type": "timeseries",
-   "title": "LLM tokens/s for NovaAgent users (LiteLLM)",
+   "title": "LLM tokens/s for Dorj Agent users (LiteLLM)",
    "gridPos": {
     "x": 12,
     "y": 20,
@@ -285,7 +285,7 @@
   },
   {
    "type": "timeseries",
-   "title": "LLM spend (USD/h) for NovaAgent",
+   "title": "LLM spend (USD/h) for Dorj Agent",
    "gridPos": {
     "x": 0,
     "y": 28,

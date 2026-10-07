@@ -196,3 +196,14 @@ No `NOVA_CLIENT_REV`, control, agent-server, or download revision bumps were mad
   - `python3 -m py_compile` on CLI modules.
   - Packaging check confirmed both console scripts point to the same entrypoint.
   - `PYTHONPATH=cli dorj-agent --help` rendered `Dorj Agent CLI` successfully.
+
+## Item 9 — Grafana dashboard
+
+- Status: **DONE (config verified; not deployed)**
+- Files:
+  - `deploy/grafana-dashboard-nova.json`
+- Implementation:
+  - Dashboard and panel titles now use `Dorj Agent`.
+  - Dashboard UID remains `nova-agent`, so existing links and provisioning behavior are unchanged.
+- Verification:
+  - Parsed the JSON and asserted title/UID and panel titles.
