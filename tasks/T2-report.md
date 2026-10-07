@@ -251,6 +251,41 @@
   - `NOVA_AGENT_SERVER_TAG="1.38.0-nova12"`
   - `NOVA_DOWNLOADS_REV="2"`
 
+## Deployment plan and rollback
+
+- Pre-deploy etcd check: **PASS**. Cluster endpoint status showed DB sizes `646 MB`, `644 MB`, and
+  `640 MB` (all below the `1.5 GiB` stop threshold); all three members were in sync with no errors.
+- Owner-approved deployment tags:
+  - nova-control: `0.4.4` → `0.5.0`
+  - agent-server: `1.38.0-nova11` → `1.38.0-nova12`
+  - nova-downloads: `1.6.6-nova.1-1` → `1.6.6-nova.2-2`
+  - desktop client: `1.6.6+nova.1` → `1.6.6+nova.2`
+- Deployment command: `cd /workdir/k8s-deploy && ./scripts/140-deploy-nova.sh`
+
+### Exact rollback
+
+Run these only if deployment, smoke, download e2e, wrong-password API check, or visible-brand scan
+fails. Use the current live tag listed above.
+
+```bash
+K=/workdir/k8s-deploy/inventory/mycluster/artifacts/kubectl
+C=/workdir/k8s-deploy/inventory/mycluster/artifacts/admin.conf
+
+"$K" --kubeconfig="$C" -n nova set image deployment/nova-control control=172.16.50.89:5000/nova-control:0.4.4
+"$K" --kubeconfig="$C" -n nova set image deployment/nova-downloads nginx=172.16.50.89:5000/nova-downloads:1.6.6-nova.1-1
+
+for d in $("$K" --kubeconfig="$C" -n nova-ws get deploy -o name); do
+  "$K" --kubeconfig="$C" -n nova-ws set image "$d" agent-server=172.16.50.89:5000/nova-agent-server:1.38.0-nova11
+done
+
+"$K" --kubeconfig="$C" -n nova rollout status deployment/nova-control deployment/nova-downloads --timeout=240s
+"$K" --kubeconfig="$C" -n nova-ws rollout status deployment --timeout=240s
+```
+
+Note: Keycloak realm display names were already changed idempotently by script 141 and are not
+image tags; rollback above intentionally restores the approved control-plane/download/agent-server
+images.
+
 ## Final readiness
 
 - Items 1–11 are complete.
