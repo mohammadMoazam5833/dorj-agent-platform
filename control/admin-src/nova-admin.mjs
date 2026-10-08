@@ -202,6 +202,9 @@ const PAGE = `<!doctype html>
 <link rel="icon" href="__FAVICON__">
 <title>NovaAgent | پنل مدیریت</title>
 <style>
+@font-face{font-family:Vazirmatn;src:url(/fonts/vazirmatn-400.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:Vazirmatn;src:url(/fonts/vazirmatn-600.woff2) format("woff2");font-weight:600;font-style:normal;font-display:swap}
+@font-face{font-family:Vazirmatn;src:url(/fonts/vazirmatn-700.woff2) format("woff2");font-weight:700;font-style:normal;font-display:swap}
 :root{--bg:#0d0d0f;--card:#161619;--card2:#1d1d21;--line:#2a2a30;--tx:#ececf1;--tx2:#9a9aa5;--acc:#d97757;--acc2:#8b7cf6;--ok:#3fb950;--bad:#f85149;--warn:#d29922}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--tx);font-family:Vazirmatn,"Segoe UI",Tahoma,sans-serif;min-height:100vh}
@@ -305,7 +308,12 @@ function spark(cv,vals,color){
 }
 
 function uiFa(){
-  return String(navigator.language || "fa").toLowerCase().indexOf("fa") === 0;
+  // The admin panel is Persian by default; ?lang=en is available for operators who need English.
+  try {
+    return String(new URLSearchParams(location.search).get("lang") || "fa").toLowerCase() !== "en";
+  } catch(e) {
+    return true;
+  }
 }
 function L(en,fa){
   return uiFa() ? fa : en;
@@ -386,7 +394,7 @@ function dataTable(id,cfg){
     '<div class="table-tools"><label class="table-search"><span>'+L("Search","جستجو")+"</span>"+
     '<input type="search" data-table-filter="'+esc(id)+'" value="'+esc(st.query)+'" placeholder="'+esc(L("Search…","جستجو…"))+'" aria-label="'+esc(L("Search table","جستجوی جدول"))+'"></label>'+
     '<div class="table-meta" data-table-meta="'+esc(id)+'">'+localeDigits(m.filtered)+" "+L("rows","ردیف")+"</div></div>"+
-    '<div class="table-wrap"><table><thead><tr>'+tableHead(id,cfg)+"</tr></thead><tbody data-table-body=\""+esc(id)+'">'+tableBody(id)+"</tbody></table></div>"+
+    '<div class="table-wrap"><table><thead><tr>'+tableHead(id,cfg)+"</tr></thead><tbody data-table-body=\\""+esc(id)+'">'+tableBody(id)+"</tbody></table></div>"+
     '<div class="table-footer"><span>'+L("Page size: 20","اندازه صفحه: ۲۰")+"</span>"+
     '<div class="table-pager"><button class="mini ghost" data-table-page="prev" data-table-id="'+esc(id)+'"'+(m.page<=1?" disabled":"")+">"+L("Previous","قبلی")+"</button>"+
     '<span data-table-page-label="'+esc(id)+'">'+L("Page","صفحه")+" "+localeDigits(m.page)+" "+L("of","از")+" "+localeDigits(m.pages)+"</span>"+
@@ -414,8 +422,8 @@ function renderLogin(msg){
   document.getElementById("app").innerHTML='<div class="login"><div class="lcard">'+
   '<h1><span>NovaAgent</span></h1><p>پنل مدیریت و مانیتورینگ سرور</p>'+
   (msg?'<p style="color:var(--bad)">'+esc(msg)+"</p>":"")+
-  '<input id="pw" type="password" placeholder="رمز مدیریت" autofocus onkeydown="if(event.key===\'Enter\')doLogin()">'+
-  '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px"><label class="tog"><input type="checkbox" id="showpw" onchange="document.getElementById(\'pw\').type=this.checked?\'text\':\'password\'"> نمایش رمز</label></div>'+
+  '<input id="pw" type="password" placeholder="رمز مدیریت" autofocus onkeydown="if(event.key===\\'Enter\\')doLogin()">'+
+  '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px"><label class="tog"><input type="checkbox" id="showpw" onchange="document.getElementById(\\'pw\\').type=this.checked?\\'text\\':\\'password\\'"> نمایش رمز</label></div>'+
   '<div style="height:10px"></div><button style="width:100%" onclick="doLogin()">ورود</button>'+
   '<p style="margin-top:14px;font-size:11px;color:var(--tx2)">پنل مدیریت · v4</p></div></div>';
 }
@@ -461,10 +469,10 @@ function shell(){
   document.getElementById("app").innerHTML=
   '<div class="top"><div class="brand"><span class="logo"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M19 46V18l26 28V18" stroke="#d97757" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span><span>NovaAgent</span>&nbsp;· پنل مدیریت</div>'+
   '<div class="tabs">'+
-  '<div class="tab" data-t="dash" onclick="setTab(\'dash\')">داشبورد</div>'+
-  '<div class="tab" data-t="tenants" onclick="setTab(\'tenants\')">کاربران</div>'+
-  '<div class="tab" data-t="convs" onclick="setTab(\'convs\')">گفتگوها</div>'+
-  '<div class="tab" data-t="logs" onclick="setTab(\'logs\')">لاگ‌ها</div>'+
+  '<div class="tab" data-t="dash" onclick="setTab(\\'dash\\')">داشبورد</div>'+
+  '<div class="tab" data-t="tenants" onclick="setTab(\\'tenants\\')">کاربران</div>'+
+  '<div class="tab" data-t="convs" onclick="setTab(\\'convs\\')">گفتگوها</div>'+
+  '<div class="tab" data-t="logs" onclick="setTab(\\'logs\\')">لاگ‌ها</div>'+
   "</div>"+
   '<button class="ghost mini" onclick="changePw()">تغییر رمز</button>'+
   '<button class="ghost mini" onclick="logout()">خروج</button></div><div class="wrap" id="view"></div>';
@@ -485,15 +493,15 @@ function loadDash(){
       {key:"active",label:L("Status","وضعیت"),text:function(s){return s.active},cell:function(s){return dot(s.active==="active")+esc(s.active)}},
       {key:"upSec",label:L("Uptime","آپ‌تایم"),text:function(s){return s.active==="active"?fmtUp(s.upSec):"-"},sort:function(s){return s.upSec||0}},
       {key:"actions",label:L("Action","عملیات"),text:function(s){return s.unit},sort:function(s){return s.unit},cell:function(s){
-        return s.unit==="nova-admin"?'<span class="mut">-</span>':'<button class="mini ghost" onclick="sAction(\''+esc(s.unit)+'\',\'restart\')">'+L("Restart","ری‌استارت")+"</button>";
+        return s.unit==="nova-admin"?'<span class="mut">-</span>':'<button class="mini ghost" onclick="sAction(\\''+esc(s.unit)+'\\',\\'restart\\')">'+L("Restart","ری‌استارت")+"</button>";
       }}
     ]});
     document.getElementById("view").innerHTML=
     '<div class="grid">'+
     '<div class="card"><h3>آپ‌تایم سرور</h3><div class="big">'+esc(d.uptimeText)+"</div></div>"+
-    '<div class="card"><h3>حافظه RAM <span class="mut">'+memPct+"%</span></h3><div class=\"mut\">"+fmtB(d.mem.total-d.mem.free)+" از "+fmtB(d.mem.total)+'</div><canvas class="spark" id="spRam"></canvas></div>'+
-    '<div class="card"><h3>دیسک <span class="mut">'+diskPct+"%</span></h3><div class=\"mut\">"+fmtB(d.disk.used)+" از "+fmtB(d.disk.total)+'</div><div class="bar"><i style="width:'+diskPct+'%"></i></div><div style="margin-top:10px"><button class="mini ghost" onclick="loadDisk()">جزئیات پوشه‌ها</button></div><div id="diskbox"></div></div>'+
-    '<div class="card"><h3>بار CPU</h3><div class="big">'+d.load[0].toFixed(2)+"</div><canvas class=\"spark\" id=\"spLoad\"></canvas></div>"+
+    '<div class="card"><h3>حافظه RAM <span class="mut">'+memPct+"%</span></h3><div class=\\"mut\\">"+fmtB(d.mem.total-d.mem.free)+" از "+fmtB(d.mem.total)+'</div><canvas class="spark" id="spRam"></canvas></div>'+
+    '<div class="card"><h3>دیسک <span class="mut">'+diskPct+"%</span></h3><div class=\\"mut\\">"+fmtB(d.disk.used)+" از "+fmtB(d.disk.total)+'</div><div class="bar"><i style="width:'+diskPct+'%"></i></div><div style="margin-top:10px"><button class="mini ghost" onclick="loadDisk()">جزئیات پوشه‌ها</button></div><div id="diskbox"></div></div>'+
+    '<div class="card"><h3>بار CPU</h3><div class="big">'+d.load[0].toFixed(2)+"</div><canvas class=\\"spark\\" id=\\"spLoad\\"></canvas></div>"+
     "</div>"+
     '<div class="card" style="margin-bottom:22px"><h3>سرویس‌ها <span class="mut">به‌روزرسانی خودکار <label class="tog"><input type="checkbox" '+(S.auto?"checked":"")+' onchange="S.auto=this.checked"> فعال</label></span></h3>'+svcTable+"</div>"+
     '<h2 class="sec">کلاینت‌های متصل (Gateway)</h2><div style="margin-bottom:8px">'+(gw||'<span class="mut">اطلاعاتی نیست</span>')+"</div>"+
@@ -553,7 +561,7 @@ function loadTenants(){
       {key:"clientConnected",label:L("Client","کلاینت"),text:function(t){return t.clientConnected?"connected":"disconnected"},sort:function(t){return t.clientConnected?1:0},cell:function(t){
         return dot(t.clientConnected)+(t.clientConnected?L("Connected","متصل"):L("Disconnected","قطع"));
       }},
-      {key:"agentOk",label:"Agent",text:function(t){return t.agentOk?"healthy":"unresponsive"},sort:function(t){return t.agentOk?1:0},cell:function(t){
+      {key:"agentOk",label:L("Agent","ایجنت"),text:function(t){return t.agentOk?"healthy":"unresponsive"},sort:function(t){return t.agentOk?1:0},cell:function(t){
         return dot(t.agentOk)+(t.agentOk?L("Healthy","سالم"):L("Unresponsive","بدون پاسخ"));
       }},
       {key:"port",label:L("Port","پورت"),value:function(t){return t.port},cell:function(t){return '<span class="mut" style="direction:ltr">'+esc(t.port)+"</span>"}},
@@ -562,16 +570,16 @@ function loadTenants(){
       {key:"actions",label:L("Action","عملیات"),text:function(t){return t.name},sort:function(t){return t.name},cell:function(t){
         var act=t.active==="active";
         var btns='<div class="actions">'+
-        (act?'<button class="mini ghost" onclick="tAction(\''+esc(t.name)+'\',\'restart\')">'+L("Restart","ری‌استارت")+'</button><button class="mini ghost" onclick="tAction(\''+esc(t.name)+'\',\'stop\')">'+L("Stop","توقف")+"</button>"
-            :'<button class="mini ghost" onclick="tAction(\''+esc(t.name)+'\',\'start\')">'+L("Start","راه‌اندازی")+"</button>")+
-        '<button class="mini ghost" onclick="tPw(\''+esc(t.name)+'\')">'+(t.hasPortalUser?'تغییر رمز':'رمز')+"</button>";
-        if(t.name!=="default")btns+='<button class="mini danger" onclick="tDel(\''+esc(t.name)+'\')">'+L("Delete","حذف")+"</button>";
+        (act?'<button class="mini ghost" onclick="tAction(\\''+esc(t.name)+'\\',\\'restart\\')">'+L("Restart","ری‌استارت")+'</button><button class="mini ghost" onclick="tAction(\\''+esc(t.name)+'\\',\\'stop\\')">'+L("Stop","توقف")+"</button>"
+            :'<button class="mini ghost" onclick="tAction(\\''+esc(t.name)+'\\',\\'start\\')">'+L("Start","راه‌اندازی")+"</button>")+
+        '<button class="mini ghost" onclick="tPw(\\''+esc(t.name)+'\\')">'+(t.hasPortalUser?'تغییر رمز':'رمز')+"</button>";
+        if(t.name!=="default")btns+='<button class="mini danger" onclick="tDel(\\''+esc(t.name)+'\\')">'+L("Delete","حذف")+"</button>";
         return btns+"</div>";
       }}
     ]});
     document.getElementById("view").innerHTML=
-    '<div class="rowflex"><h2 class="sec" style="margin:0">کاربران (Tenants)</h2><button onclick="document.getElementById(\'ntfrm\').classList.toggle(\'on\')">+ کاربر جدید</button><span class="mut">رمز، همان لاگین پورتال NovaAgent است</span></div>'+
-    '<div class="frm" id="ntfrm"><input id="ntname" placeholder="نام کاربری مثلاً node3" onkeydown="if(event.key===\'Enter\')document.getElementById(\'ntpw\').focus()"><input id="ntpw" type="password" placeholder="رمز پورتال" onkeydown="if(event.key===\'Enter\')tCreate()"><button onclick="tCreate()">ایجاد</button><span class="mut">پورت و کلیدها خودکار ساخته می‌شوند</span></div>'+
+    '<div class="rowflex"><h2 class="sec" style="margin:0">کاربران (Tenants)</h2><button onclick="document.getElementById(\\'ntfrm\\').classList.toggle(\\'on\\')">+ کاربر جدید</button><span class="mut">رمز، همان لاگین پورتال NovaAgent است</span></div>'+
+    '<div class="frm" id="ntfrm"><input id="ntname" placeholder="نام کاربری مثلاً node3" onkeydown="if(event.key===\\'Enter\\')document.getElementById(\\'ntpw\\').focus()"><input id="ntpw" type="password" placeholder="رمز پورتال" onkeydown="if(event.key===\\'Enter\\')tCreate()"><button onclick="tCreate()">ایجاد</button><span class="mut">پورت و کلیدها خودکار ساخته می‌شوند</span></div>'+
     tenantsTable;
   });
 }
