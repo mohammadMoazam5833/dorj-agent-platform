@@ -38,7 +38,7 @@ EDITS = [
     ('placeholder="نام کاربری مثلاً node3"', 'placeholder="نام کاربری Active Directory (مثلاً ali)"'),
     ('<span class="mut">رمز، همان لاگین پورتال NovaAgent است</span>', '<span class="mut">کاربران با حساب سازمانی (Active Directory) وارد اپ می‌شوند</span>'),
     ('<th>پورت</th>', '<th>Workspace</th>'),
-    ('<title>NovaAgent | پنل مدیریت</title>', '<title>Dorj Agent | پنل مدیریت</title>'),
+    ('<title>NovaAgent | پنل مدیریت</title>', '<title>دستیار دُرج | پنل مدیریت</title>'),
     (':root{--bg:#0d0d0f;--card:#161619;--card2:#1d1d21;--line:#2a2a30;--tx:#ececf1;--tx2:#9a9aa5;--acc:#d97757;--acc2:#8b7cf6;--ok:#3fb950;--bad:#f85149;--warn:#d29922}',
      ':root{--bg:#0B1B3A;--card:#11244e;--card2:#183567;--line:#2b4a8f;--tx:#f5f7fb;--tx2:#b7c3db;--acc:#E8A317;--acc2:#F4C24B;--ok:#3fb950;--bad:#f85149;--warn:#d29922}\n'
      'body{background:linear-gradient(120deg,#1E3A8A,#16295e)}\n'
