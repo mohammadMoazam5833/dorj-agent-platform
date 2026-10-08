@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import os
 import re
 import time
 
@@ -417,5 +418,56 @@ def _install_memory() -> None:
     logger.info("nova_server_patches: persistent memory read from the customer PC through the bridge")
 
 
+# --- Destructive-command gate on the customer's PC (2026-10-08) ---------------------------------
+# The SDK pauses only when the model itself rates an action risky, and "Always allow" turns
+# confirmation off entirely. For a tool that runs on employees' PCs IT wants a hard floor:
+# destructive commands ALWAYS ask the user, even after "Always allow". This only ADDS
+# confirmations; every other action keeps the SDK's own risk-based behaviour.
+# Extra patterns: NOVA_CMD_DENY (";;"-separated regexes).
+_DENY = [
+    r"\brm\s+(-\w*[rR]\w*\s+-\w*f|-\w*f\w*\s+-\w*[rR]|-\w*[rR]\w*f|-\w*f\w*[rR]|--recursive|--force)",
+    r"\bsudo\b", r"\bmkfs(\.\w+)?\b", r"\bdd\s+if=", r"\bshred\b",
+    r"\b(shutdown|reboot|poweroff|halt)\b", r"\bchmod\s+-R\s+0?777\b",
+    r"\bgit\s+push\b.*(\s-f\b|--force)", r"\bgit\s+reset\s+--hard\b", r"\bgit\s+clean\s+-\w*f",
+    r"\bgit\s+branch\s+-D\b", r"\bgit\s+filter-(branch|repo)\b",
+    r"\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?(ba|z)?sh\b", r"(?i)\b(iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b.*\|\s*iex\b",
+    r"(?i)\bdel\s+(/\w+\s+)*/[sq]\b", r"(?i)\b(rd|rmdir)\s+(/\w+\s+)*/s\b", r"(?i)\bformat\s+[a-z]:",
+    r"(?i)\bRemove-Item\b.*-Recurse", r"(?i)\b(Stop|Restart)-Computer\b", r"(?i)\bdiskpart\b",
+    r"(?i)\breg\s+delete\b", r"(?i)\b(DROP|TRUNCATE)\s+(DATABASE|TABLE|SCHEMA)\b",
+    r"\bnpm\s+publish\b", r"\bkubectl\s+delete\b", r"\bdocker\s+(system\s+prune|rm\s+-f)\b",
+    r">\s*/dev/sd[a-z]",
+]
+
+
+def is_destructive(command: str) -> bool:
+    extra = [p for p in os.environ.get("NOVA_CMD_DENY", "").split(";;") if p.strip()]
+    return any(re.search(p, command) for p in _DENY + extra)
+
+
+def _install_command_gate() -> None:
+    from openhands.sdk.agent import agent as agent_mod
+    from openhands.sdk.conversation.state import ConversationExecutionStatus
+
+    Agent = agent_mod.Agent
+    original = Agent._requires_user_confirmation
+    if getattr(original, "_nova_wrapped", False):
+        return
+
+    @functools.wraps(original)
+    def requires_confirmation(self, state, action_events):
+        risky = [c for c in (getattr(getattr(ev, "action", None), "command", None) for ev in action_events or [])
+                 if isinstance(c, str) and is_destructive(c)]
+        if risky:
+            logger.info("command gate: user confirmation required for %r", risky)
+            state.execution_status = ConversationExecutionStatus.WAITING_FOR_CONFIRMATION
+            return True
+        return original(self, state, action_events)
+
+    requires_confirmation._nova_wrapped = True
+    Agent._requires_user_confirmation = requires_confirmation
+    logger.info("nova_server_patches: destructive-command gate installed")
+
+
 _install()
 _install_memory()
+_install_command_gate()
