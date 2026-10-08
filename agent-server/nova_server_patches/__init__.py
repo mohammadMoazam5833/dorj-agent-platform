@@ -360,4 +360,62 @@ def _install() -> None:
     logger.info("nova_server_patches installed (customer roots + worktree guard + internal LLM base)")
 
 
+def _install_memory() -> None:
+    """Persistent memory lives on the customer's PC, so read it there (2026-10-08).
+
+    The SDK's ``load_memory`` reads ``~/.openhands/memory/MEMORY.md`` (user tier) and
+    ``<workspace>/.openhands/memory/MEMORY.md`` (project tier) with ``Path.read_text`` on this
+    server, but the agent writes both with its file/terminal tools, which run on the customer's
+    PC through sidecar_bridge - so memory was written there and never found here. While the
+    workspace is bridged, read the index through the bridge instead: the server home maps to the
+    customer's home from the sidecar hello, customer paths are read as they are. Unbridged
+    workspaces keep the stock behaviour.
+    """
+    from pathlib import Path
+
+    from openhands.sdk.context import memory as mem
+
+    original = mem._read_index
+    if getattr(original, "_nova_wrapped", False):
+        return
+
+    def customer_path(path: Path) -> str | None:
+        p = str(path)
+        server_home = str(Path.home())
+        if p == server_home or p.startswith(server_home + "/"):
+            home = str((customer_hello().get("system") or {}).get("home") or "")
+            if not home:
+                return None
+            rel = p[len(server_home):].lstrip("/")
+            sep = "\\" if _WIN_PATH.match(home) else "/"
+            return home.rstrip("/\\") + sep + rel.replace("/", sep)
+        if _WIN_PATH.match(p):  # Path(r"C:\proj") / ".openhands/..." mixes separators on Linux
+            return p.replace("/", "\\")
+        if under_roots(p, customer_roots()):
+            return p
+        return None
+
+    @functools.wraps(original)
+    def read_index(path):
+        if not bridged():
+            return original(path)
+        target = customer_path(Path(path))
+        if target is None:
+            return original(path)
+        try:
+            from sidecar_bridge.client import client_from_env
+
+            res = client_from_env().read_file(target)
+        except Exception as exc:  # missing file, customer offline: no memory, never a failure
+            logger.debug("memory index %s not readable through the bridge: %s", target, exc)
+            return None
+        text = (res.get("content") if isinstance(res, dict) else res) or ""
+        return str(text).strip() or None
+
+    read_index._nova_wrapped = True
+    mem._read_index = read_index
+    logger.info("nova_server_patches: persistent memory read from the customer PC through the bridge")
+
+
 _install()
+_install_memory()
