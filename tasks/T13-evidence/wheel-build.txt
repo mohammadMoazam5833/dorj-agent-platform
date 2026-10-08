@@ -1,0 +1,16 @@
+Processing ./cli
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: dorj-agent-cli
+  Building wheel for dorj-agent-cli (pyproject.toml): started
+  Building wheel for dorj-agent-cli (pyproject.toml): finished with status 'done'
+  Created wheel for dorj-agent-cli: filename=dorj_agent_cli-0.4.1-py3-none-any.whl size=21008 sha256=8d75e56d053e143436f1edf060e5b1d1d07a9ec78b66041b9029a0422fa37a51
+  Stored in directory: /tmp/pip-ephem-wheel-cache-oulh23w1/wheels/26/72/f5/09f3598cc6cd557412c3c71c2371eb9536c045c94b4237f4f8
+Successfully built dorj-agent-cli
+exit=0
+total 24
+-rw-r--r--. 1 admin admin 21008 Oct  8 04:53 dorj_agent_cli-0.4.1-py3-none-any.whl

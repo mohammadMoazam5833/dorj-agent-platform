@@ -1,0 +1,3 @@
+npx playwright test cli.spec.js -g destructive
+
+1 passed (10.8s)

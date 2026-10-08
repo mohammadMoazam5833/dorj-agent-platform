@@ -1,0 +1,22 @@
+usage: dorj-agent [-h] [--version] [--json]
+                  {login,logout,whoami,run,chat,conversations,ws,models,usage}
+                  ...
+
+خط فرمان Dorj Agent
+
+positional arguments:
+  {login,logout,whoami,run,chat,conversations,ws,models,usage}
+    login               ورود
+    logout              خروج
+    whoami              نمایش کاربر واردشده
+    run                 اجرای یک کار در پوشه‌ی فعلی
+    chat                جلسه‌ی تعاملی در پوشه‌ی فعلی
+    conversations       فهرست گفتگوها
+    ws                  فضای کاری agent-server
+    models              فهرست مدل‌ها
+    usage               نمایش مصرف
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --json                خروجی JSON برای اسکریپت و CI

@@ -27,6 +27,7 @@ from .bridge import WorkspaceBridge, WorkspaceConnectionError
 from .i18n import is_fa, tr
 
 EXIT_OK, EXIT_ERR, EXIT_QUOTA, EXIT_AUTH, EXIT_WORKSPACE = 0, 1, 2, 3, 4
+EXIT_CONFIRMATION_REJECTED = 5
 
 
 class Api:
@@ -47,6 +48,10 @@ class Api:
 
 class QuotaError(RuntimeError):
     pass
+
+
+class ConfirmationRejected(RuntimeError):
+    """A non-interactive CLI session rejected a pending tool call."""
 
 
 def _print(obj, as_json):
@@ -82,6 +87,110 @@ def _send(api: Api, conv: str, text: str) -> None:
     )
 
 
+def _confirmation_preview(ev: dict) -> str:
+    action = ev.get("action") or {}
+    value = (
+        action.get("command")
+        or action.get("path")
+        or ev.get("summary")
+        or action.get("kind")
+        or "action"
+    )
+    value = str(value).strip()
+    return value[:280] + ("…" if len(value) > 280 else "")
+
+
+def _pending_confirmation_actions(items: list[dict]) -> list[dict]:
+    """Return agent tool calls without an observation; newest action is first."""
+    observed = {
+        ev.get("tool_call_id")
+        for ev in items
+        if ev.get("kind") == "ObservationEvent" and ev.get("tool_call_id")
+    }
+    actions = [
+        ev
+        for ev in items
+        if ev.get("source") == "agent"
+        and ev.get("kind") == "ActionEvent"
+        and ev.get("tool_call_id")
+        and ev["tool_call_id"] not in observed
+    ]
+    return list(reversed(actions))
+
+
+def _respond_to_confirmation(api: Api, conv: str, accept: bool) -> dict:
+    body: dict[str, object] = {"accept": accept}
+    if not accept:
+        body["reason"] = "rejected_by_user"
+    return api.req(
+        "POST",
+        f"/api/conversations/{conv}/events/respond_to_confirmation",
+        json=body,
+    )
+
+
+def _handle_confirmation(
+    api: Api, conv: str, items: list[dict], as_json: bool, auto_yes: bool
+) -> None:
+    pending = _pending_confirmation_actions(items)
+    if not pending:
+        return
+
+    summaries = [
+        {
+            "tool": ev.get("tool_name") or (ev.get("action") or {}).get("kind") or "action",
+            "command": _confirmation_preview(ev),
+        }
+        for ev in pending
+    ]
+    if as_json:
+        print(
+            json.dumps({"pending_confirmations": summaries}, ensure_ascii=False),
+            flush=True,
+        )
+    else:
+        print(
+            tr("Pending confirmation:", "در انتظار تأیید:"),
+            file=sys.stderr,
+        )
+        for summary in summaries:
+            print(f"  ▸ {summary['tool']}: {summary['command']}", file=sys.stderr)
+
+    if auto_yes:
+        _respond_to_confirmation(api, conv, True)
+        print(tr("Approved automatically.", "به‌طور خودکار تأیید شد."), file=sys.stderr)
+        return
+
+    print(
+        tr(
+            "This command needs your confirmation. Run it? [y/N]",
+            "این دستور تأیید شما را لازم دارد. اجرا شود؟ [y/N]",
+        ),
+        end="",
+        file=sys.stderr,
+        flush=True,
+    )
+    try:
+        answer = input().strip().lower()
+    except (EOFError, KeyboardInterrupt, OSError):
+        answer = ""
+
+    if answer in {"y", "yes"}:
+        _respond_to_confirmation(api, conv, True)
+        print(tr("Approved.", "تأیید شد."), file=sys.stderr)
+        return
+
+    _respond_to_confirmation(api, conv, False)
+    print(tr("Rejected.", "رد شد."), file=sys.stderr)
+    if sys.stdin is None or not sys.stdin.isatty():
+        raise ConfirmationRejected(
+            tr(
+                "No interactive stdin: the pending command was rejected.",
+                "ورودی تعاملی نیست؛ دستور در انتظار تأیید رد شد.",
+            )
+        )
+
+
 def _render(ev: dict) -> str | None:
     kind, src = ev.get("kind", ""), ev.get("source", "")
     if kind == "MessageEvent" and src == "agent":
@@ -100,7 +209,14 @@ def _render(ev: dict) -> str | None:
     return None
 
 
-def _follow(api: Api, conv: str, since_count: int, as_json: bool, timeout_s: int) -> str:
+def _follow(
+    api: Api,
+    conv: str,
+    since_count: int,
+    as_json: bool,
+    timeout_s: int,
+    yes: bool = False,
+) -> str:
     """Poll events until the agent stops; returns the final execution status."""
     seen, deadline, status = since_count, time.time() + timeout_s, "running"
     while time.time() < deadline:
@@ -119,6 +235,10 @@ def _follow(api: Api, conv: str, since_count: int, as_json: bool, timeout_s: int
                     print(line, flush=True)
         seen = max(seen, len(items))
         status = api.req("GET", f"/api/conversations/{conv}").get("execution_status", "")
+        if status == "waiting_for_confirmation":
+            _handle_confirmation(api, conv, items, as_json, yes)
+            time.sleep(1.5)
+            continue
         if status in ("finished", "error", "stuck", "paused", "idle") and seen >= len(items):
             return status
         time.sleep(1.5)
@@ -165,7 +285,9 @@ def _use_existing_tunnel(api: Api, working_dir: Path) -> bool:
     return True
 
 
-async def _run_with_workspace(api: Api, task: str, model: str | None, as_json: bool, timeout_s: int) -> int:
+async def _run_with_workspace(
+    api: Api, task: str, model: str | None, as_json: bool, timeout_s: int, yes: bool
+) -> int:
     working_dir = Path.cwd().resolve(strict=False)
     def _print_result(conv: str, status: str) -> None:
         if not as_json:
@@ -174,7 +296,9 @@ async def _run_with_workspace(api: Api, task: str, model: str | None, as_json: b
     if _use_existing_tunnel(api, working_dir):
         conv = await asyncio.to_thread(_start_conversation, api, model, working_dir)
         await asyncio.to_thread(_send, api, conv, task)
-        status = await asyncio.to_thread(_follow, api, conv, 0, as_json, timeout_s)
+        status = await asyncio.to_thread(
+            _follow, api, conv, 0, as_json, timeout_s, yes
+        )
         _print_result(conv, status)
         return EXIT_OK if status in ("finished", "idle") else EXIT_ERR
 
@@ -198,17 +322,23 @@ async def _run_with_workspace(api: Api, task: str, model: str | None, as_json: b
             print(f"conversation {conv}", file=sys.stderr)
         # Send and poll while the reverse bridge is open. Long LLM calls still need its keepalive.
         await asyncio.to_thread(_send, api, conv, task)
-        status = await asyncio.to_thread(_follow, api, conv, 0, as_json, timeout_s)
+        status = await asyncio.to_thread(
+            _follow, api, conv, 0, as_json, timeout_s, yes
+        )
     _print_result(conv, status)
     return EXIT_OK if status in ("finished", "idle") else EXIT_ERR
 
 
 def cmd_run(a):
     api = Api()
-    return asyncio.run(_run_with_workspace(api, a.task, a.model, a.json, a.timeout))
+    return asyncio.run(
+        _run_with_workspace(api, a.task, a.model, a.json, a.timeout, a.yes)
+    )
 
 
-async def _chat_with_workspace(api: Api, resume: str | None, model: str | None, timeout_s: int) -> int:
+async def _chat_with_workspace(
+    api: Api, resume: str | None, model: str | None, timeout_s: int, yes: bool
+) -> int:
     working_dir = Path.cwd().resolve(strict=False)
     async with AsyncExitStack() as stack:
         if _use_existing_tunnel(api, working_dir):
@@ -244,14 +374,18 @@ async def _chat_with_workspace(api: Api, resume: str | None, model: str | None, 
                 continue
             # Chat stays in this AsyncExitStack, so every turn keeps the reverse bridge open.
             await asyncio.to_thread(_send, api, conv, text)
-            await asyncio.to_thread(_follow, api, conv, seen, False, timeout_s)
+            await asyncio.to_thread(
+                _follow, api, conv, seen, False, timeout_s, yes
+            )
             seen = await asyncio.to_thread(count_events)
     return EXIT_OK
 
 
 def cmd_chat(a):
     api = Api()
-    return asyncio.run(_chat_with_workspace(api, a.resume, a.model, a.timeout))
+    return asyncio.run(
+        _chat_with_workspace(api, a.resume, a.model, a.timeout, a.yes)
+    )
 
 
 def cmd_conversations(a):
@@ -343,12 +477,28 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("task", help=tr("task text", "متن کار"))
     s.add_argument("--model", help=tr("model name", "نام مدل"))
     s.add_argument("--timeout", type=int, default=1800, help=tr("timeout in seconds", "مهلت به ثانیه"))
+    s.add_argument(
+        "--yes",
+        action="store_true",
+        help=tr(
+            "approve pending tool confirmations automatically",
+            "تأیید خودکار درخواست‌های ابزار",
+        ),
+    )
     s.set_defaults(fn=cmd_run)
 
     s = sub.add_parser("chat", help=tr("interactive session in the current directory", "جلسه‌ی تعاملی در پوشه‌ی فعلی"))
     s.add_argument("--model", help=tr("model name", "نام مدل"))
     s.add_argument("--resume", help=tr("conversation id to resume", "شناسه گفتگو برای ادامه"))
     s.add_argument("--timeout", type=int, default=1800, help=tr("timeout in seconds", "مهلت به ثانیه"))
+    s.add_argument(
+        "--yes",
+        action="store_true",
+        help=tr(
+            "approve pending tool confirmations automatically",
+            "تأیید خودکار درخواست‌های ابزار",
+        ),
+    )
     s.set_defaults(fn=cmd_chat)
 
     s = sub.add_parser("conversations", help=tr("list conversations", "فهرست گفتگوها"))
@@ -375,6 +525,9 @@ def main(argv=None):
     except QuotaError as e:
         print(f"{tr('quota', 'سهمیه')}: {e}", file=sys.stderr)
         return EXIT_QUOTA
+    except ConfirmationRejected as e:
+        print(str(e), file=sys.stderr)
+        return EXIT_CONFIRMATION_REJECTED
     except WorkspaceConnectionError as e:
         message = tr(
             "workspace connection failed: " + str(e),

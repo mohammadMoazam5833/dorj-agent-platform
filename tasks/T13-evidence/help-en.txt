@@ -1,0 +1,22 @@
+usage: dorj-agent [-h] [--version] [--json]
+                  {login,logout,whoami,run,chat,conversations,ws,models,usage}
+                  ...
+
+Dorj Agent command line
+
+positional arguments:
+  {login,logout,whoami,run,chat,conversations,ws,models,usage}
+    login               sign in
+    logout              sign out
+    whoami              show the signed-in user
+    run                 run one task in the current directory
+    chat                interactive session in the current directory
+    conversations       list conversations
+    ws                  agent-server workspace
+    models              list models
+    usage               show usage
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --json                JSON output for scripts and CI

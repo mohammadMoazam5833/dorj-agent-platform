@@ -11,12 +11,12 @@ const CLI_DIR = path.resolve(__dirname, '../cli')
 const PY = process.env.NOVA_PY || 'python3'
 const cfg = mkdtempSync(path.join(tmpdir(), 'dorj-cli-e2e-'))
 const work = mkdtempSync(path.join(tmpdir(), 'dorj-cli-work-'))
-const env = { ...process.env, LANG: 'fa_IR.UTF-8', PYTHONPATH: CLI_DIR, PYTHONUNBUFFERED: '1',
+const env = { ...process.env, LANG: 'fa_IR.UTF-8', LC_ALL: 'fa_IR.UTF-8', PYTHONPATH: CLI_DIR, PYTHONUNBUFFERED: '1',
   NOVA_CONFIG_DIR: cfg,
   NOVA_RESOLVE: process.env.NOVA_RESOLVE || 'nova.isigpu.local=172.16.50.202' }
 for (const k of ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy', 'ALL_PROXY', 'all_proxy']) delete env[k]
-const nova = (args, extra = {}) => spawnSync(PY, ['-m', 'dorj_agent_cli.main', ...args],
-  { cwd: work, env: { ...env, ...extra }, encoding: 'utf8', timeout: 600_000 })
+const nova = (args, extra = {}, cwd = work) => spawnSync(PY, ['-m', 'dorj_agent_cli.main', ...args],
+  { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 600_000 })
 
 test.afterAll(() => {
   rmSync(cfg, { recursive: true, force: true })
@@ -48,4 +48,27 @@ test('dorj-agent CLI: auth, models, usage, reverse-workspace run, logout', async
 
   expect(nova(['logout']).status).toBe(0)
   expect(nova(['whoami']).status).toBe(3)
+})
+
+test('dorj-agent CLI asks for destructive command confirmation and supports --yes', async () => {
+  expect(process.env.NOVA_CA_BUNDLE, 'NOVA_CA_BUNDLE must point at the org root CA').toBeTruthy()
+  expect(nova(['login', '-u', process.env.E2E_USER], { NOVA_PASSWORD: process.env.E2E_PASS }).status).toBe(0)
+
+  const confirmationWork = path.join(work, 'confirmation-work')
+  const buildDir = path.join(confirmationWork, 'build')
+  spawnSync('git', ['init', confirmationWork])
+  spawnSync('mkdir', ['-p', buildDir])
+  spawnSync('touch', [path.join(buildDir, 'keep')])
+
+  const rejected = nova(['run', 'Run exactly: rm -rf build', '--timeout', '540'], {}, confirmationWork)
+  expect(rejected.status, `${rejected.stdout}\n${rejected.stderr}`).toBe(5)
+  expect(rejected.stderr).toMatch(/تأیید شما را لازم دارد/)
+  expect(rejected.stderr).toMatch(/ورودی تعاملی نیست/)
+  expect(existsSync(buildDir), 'the rejected command must not run').toBe(true)
+
+  const approved = nova(['run', 'Run exactly: rm -rf build', '--yes', '--timeout', '540'], {}, confirmationWork)
+  expect(approved.status, `${approved.stdout}\n${approved.stderr}`).toBe(0)
+  expect(existsSync(buildDir), 'the approved command must remove build/').toBe(false)
+
+  expect(nova(['logout']).status).toBe(0)
 })
