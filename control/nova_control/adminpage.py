@@ -77,7 +77,8 @@ def render() -> str:
     # evaluate the JS template literal's escapes (the PAGE has no ${} interpolations)
     if "${" in page:
         raise RuntimeError("nova-admin PAGE gained template interpolations; update adminpage.py")
-    page = re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), "\\" + m.group(1)), page, flags=re.S)
+    # evaluate it like JavaScript does: \n/\t decoded, every other \X becomes X (identity escape)
+    page = re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), page, flags=re.S)
     logo = _logo_uri()
     page = page.replace("__FAVICON__", logo)
     for old, new in EDITS:
