@@ -83,6 +83,18 @@ if wheels:
                f'نصب: <code class="ltr">pip install --index-url {pip_index} --trusted-host {pip_host} {server}/download/{wheels[-1].name}</code> سپس <code class="ltr">dorj-agent login</code>. '
                f'گواهی ریشه‌ی سازمان: <a class="ltr" href="isigpu-root-ca.crt">isigpu-root-ca.crt</a>.</div>\n    </details>\n    ')
     sub(r"<details>\s*<summary>[^<]*به اشتراک AI", faq_cli + "<details>\n      <summary>به اشتراک AI", required=False, count=1)
+# CLI section (download-site #cli): fill the real install command, or drop it when no wheel exists
+if wheels:
+    pip_cmd = (f"pip install --index-url http://172.16.50.89:8083/repository/pypi-proxy/simple "
+               f"--trusted-host 172.16.50.89 {server}/download/{wheels[-1].name}")
+    sub(r"__CLI_PIP__", pip_cmd)
+    sub(r"__SERVER__", server)
+else:
+    sub(r'(?s)<section id="cli">.*?</section>\s*', "", count=1)
+    sub(r'<a href="#cli">[^<]*</a>', "", required=False)
+for token in ("__CLI_PIP__", "__SERVER__"):
+    if token in html:
+        sys.exit(f"download page: placeholder left: {token}")
 assert "172.16.40.188" not in html
 for legacy in ("#e0805f", "#8b7cf6", "NovaAgent", "OpenHands"):
     if legacy in html:
