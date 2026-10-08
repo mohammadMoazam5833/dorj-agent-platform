@@ -92,6 +92,21 @@
     .form { padding-top: 76px; }
   }
   @media (prefers-reduced-motion: reduce) { .d3 img, .d3::after, .card, .spinner { animation: none; } }
+
+  /* Dorj Graphite (2026-10-08): dark neutral sign-in like Cursor/Claude; gold only on the primary button */
+  body { background: #16171A; color: #E4E6EA; }
+  .brand { color: #E4E6EA; background: radial-gradient(120% 90% at 85% 10%, #2B2E34 0%, #1C1E22 45%, #0F1012 100%); }
+  .lead, .feature b { color: #F2F3F5; }
+  .feature span { color: rgba(228,230,234,.55); }
+  h1, label { color: #F2F3F5; }
+  .sub { color: #8A909B; }
+  .lang { color: #E4E6EA; background: #1D1F23; border-color: #2C2F35; }
+  .lang:hover { border-color: #7AA7FF; }
+  input { background: #1D1F23; border-color: #2C2F35; color: #E4E6EA; }
+  input:focus { border-color: #7AA7FF; background: #1D1F23; box-shadow: rgba(122,167,255,.18) 0 0 0 4px; }
+  .eye { color: #6B717C; } .eye:hover { color: #E4E6EA; }
+  button.primary { color: #0F1012; background: linear-gradient(120deg, #F4C24B 0%, #E8A317 100%); box-shadow: rgba(232,163,23,.28) 0 12px 26px -12px; }
+  button.primary:hover { box-shadow: rgba(232,163,23,.4) 0 16px 34px -12px; }
 </style>
 </head>
 <body>
