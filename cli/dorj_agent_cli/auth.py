@@ -101,5 +101,5 @@ def bearer() -> tuple:
     """(server, tenant token) of the signed-in user."""
     creds = load()
     if not creds.get("token"):
-        raise AuthError("login nakardid: `nova login`")
+        raise AuthError("Not signed in: run `dorj-agent login`")
     return creds["server"], creds["token"]

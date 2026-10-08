@@ -1,0 +1,22 @@
+Looking in indexes: http://172.16.50.89:8083/repository/pypi-proxy/simple
+Processing /tmp/dorj_agent_cli-0.4.0-py3-none-any.whl
+Collecting httpx>=0.27
+  Downloading http://172.16.50.89:8083/repository/pypi-proxy/packages/httpx/0.28.1/httpx-0.28.1-py3-none-any.whl (73 kB)
+Collecting websockets>=12
+  Downloading http://172.16.50.89:8083/repository/pypi-proxy/packages/websockets/15.0.1/websockets-15.0.1-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (181 kB)
+Collecting idna
+  Downloading http://172.16.50.89:8083/repository/pypi-proxy/packages/idna/3.20/idna-3.20-py3-none-any.whl (69 kB)
+Collecting httpcore==1.*
+  Downloading http://172.16.50.89:8083/repository/pypi-proxy/packages/httpcore/1.0.9/httpcore-1.0.9-py3-none-any.whl (78 kB)
+Collecting anyio
+  Downloading http://172.16.50.89:8083/repository/pypi-proxy/packages/anyio/4.12.1/anyio-4.12.1-py3-none-any.whl (113 kB)
+Collecting certifi
+  Downloading http://172.16.50.89:8083/repository/pypi-proxy/packages/certifi/2026.7.22/certifi-2026.7.22-py3-none-any.whl (136 kB)
+Collecting h11>=0.16
+  Downloading http://172.16.50.89:8083/repository/pypi-proxy/packages/h11/0.16.0/h11-0.16.0-py3-none-any.whl (37 kB)
+Collecting exceptiongroup>=1.0.2
+  Downloading http://172.16.50.89:8083/repository/pypi-proxy/packages/exceptiongroup/1.3.1/exceptiongroup-1.3.1-py3-none-any.whl (16 kB)
+Collecting typing_extensions>=4.5
+  Downloading http://172.16.50.89:8083/repository/pypi-proxy/packages/typing-extensions/4.16.0/typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Installing collected packages: typing-extensions, idna, h11, exceptiongroup, certifi, httpcore, anyio, websockets, httpx, dorj-agent-cli
+Successfully installed anyio-4.12.1 certifi-2026.7.22 dorj-agent-cli-0.4.0 exceptiongroup-1.3.1 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.20 typing-extensions-4.16.0 websockets-15.0.1

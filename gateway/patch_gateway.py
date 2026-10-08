@@ -100,6 +100,40 @@ EDITS.append(("""          if (entry.timer) clearInterval(entry.timer);
           entry.sendClose(1001, "gateway_shutdown");"""))
 EDITS.append(("      entry.resolve(makeError(id, code, message));",
               "      entry.resolve(makeError(entry.origId ?? id, code, message));"))
+EDITS.append(("""    console.log(
+      `[gateway] customer '${customer.name}' connected (${sessions.size} active)`,
+    );
+  });""", """    console.log(
+      `[gateway] customer '${customer.name}' connected (${sessions.size} active)`,
+    );
+    // Desktop clients only answer protocol requests; ask once for hello so /health can expose
+    // their allowlisted roots and the CLI can safely reuse their tunnel without evicting them.
+    setTimeout(() => {
+      try {
+        entry.sendText(JSON.stringify({
+          v: LOCAL_TOOLS_PROTOCOL_VERSION,
+          id: `gateway-hello-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          type: "hello",
+          params: {},
+        }));
+      } catch {
+        // The regular close/error path handles a dead socket.
+      }
+    }, 10);
+  });"""))
+# The CLI needs to know whether a desktop tunnel already exists without evicting it, and whether
+# its cwd is inside that session's allowlist. Roots are workspace metadata, not secrets.
+EDITS.append(("""      customers: names.map((name) => ({
+        name,
+        connected: sessions.has(name),
+      })),""", """      customers: names.map((name) => {
+        const entry = sessions.get(name);
+        return {
+          name,
+          connected: Boolean(entry),
+          roots: entry?.roots?.length ? entry.roots : [],
+        };
+      }),"""))
 for old, new in EDITS:
     if old not in s:
         sys.exit(f"patch_gateway: anchor not found: {old[:70]!r}")

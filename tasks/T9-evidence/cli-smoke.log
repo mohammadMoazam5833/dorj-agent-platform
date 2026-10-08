@@ -1,0 +1,42 @@
+Dorj Agent 0.4.0
+Dorj Agent 0.4.0
+usage: dorj-agent [-h] [--version] [--json]
+                  {login,logout,whoami,run,chat,conversations,ws,models,usage}
+                  ...
+
+Dorj Agent command line
+
+positional arguments:
+  {login,logout,whoami,run,chat,conversations,ws,models,usage}
+    login               sign in
+    logout              sign out
+    whoami              show the signed-in user
+    run                 run one task in the current directory
+    chat                interactive session in the current directory
+    conversations       list conversations
+    ws                  agent-server workspace
+    models              list models
+    usage               show usage
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --json                JSON output for scripts and CI
+Signed in as e2e-dorjagent@isigpu.local (e2e-dorjagent)
+{
+  "email": "e2e-dorjagent@isigpu.local",
+  "user": "e2e-dorjagent",
+  "groups": [
+    "nova-admins"
+  ],
+  "plan": "pro",
+  "workspace": {
+    "user": "e2e-dorjagent@isigpu.local",
+    "workspace": "ws-e2e-dorjagent",
+    "state": "ready",
+    "last_activity": 1791417543.9343047,
+    "idle_minutes_limit": 30
+  },
+  "default_model": "qwen3"
+}
+Signed out.

@@ -123,6 +123,26 @@ async def ws_stop(ident: Identity = Depends(current_identity)):
     return {"stopped": True}
 
 
+@app.get("/v1/workspace/tunnel")
+async def workspace_tunnel_status(ident: Identity = Depends(current_identity)):
+    """Expose only this tenant's gateway connection state (never gateway secrets)."""
+    try:
+        r = await _http.get(f"{settings.gateway_url}/health")
+        r.raise_for_status()
+        body = r.json()
+    except Exception as exc:
+        raise HTTPException(503, "workspace gateway is unavailable") from exc
+    customers = body.get("customers") if isinstance(body, dict) else None
+    mine = next((c for c in customers if isinstance(c, dict) and c.get("name") == ident.slug), None) \
+        if isinstance(customers, list) else None
+    roots = mine.get("roots") if isinstance(mine, dict) and isinstance(mine.get("roots"), list) else []
+    return {
+        "connected": bool(mine and mine.get("connected")),
+        "roots": [str(root) for root in roots],
+        "protocol": body.get("protocol") if isinstance(body, dict) else None,
+    }
+
+
 @app.get("/v1/models")
 async def models(ident: Identity = Depends(current_identity)):
     return {"default": settings.default_model, "models": await llmkeys.models()}

@@ -25,7 +25,7 @@ for f in files.values():
     if not (dist / f).exists():
         sys.exit(f"missing {dist / f}: run desktop/build-client.sh first")
     shutil.copy2(dist / f, out / f)
-wheels = sorted((ROOT / "download/dist").glob("nova_cli-*.whl"))
+wheels = sorted((ROOT / "download/dist").glob("dorj_agent_cli-*.whl"))
 extras = []
 if wheels:
     shutil.copy2(wheels[-1], out / wheels[-1].name)
@@ -88,8 +88,10 @@ sub(r'#3a4458', '#35508f', required=False)
 sub(r"<style>\n", "<style>\n@font-face{font-family:'Vazirmatn';src:url(vazirmatn-400.woff2) format('woff2');font-weight:400;font-display:swap}\n"
     "@font-face{font-family:'Vazirmatn';src:url(vazirmatn-600.woff2) format('woff2');font-weight:600 800;font-display:swap}\n", count=1)
 if wheels:
-    faq_cli = (f'<details>\n      <summary>خط فرمان (CLI) هم دارد؟</summary>\n      <div class="a">بله — <code class="ltr">nova</code> برای ترمینال و CI. '
-               f'نصب: <code class="ltr">pip install {server}/download/{wheels[-1].name}</code> سپس <code class="ltr">nova login</code>. '
+    pip_index = "http://172.16.50.89:8083/repository/pypi-proxy/simple"
+    pip_host = "172.16.50.89"
+    faq_cli = (f'<details>\n      <summary>خط فرمان (CLI) هم دارد؟</summary>\n      <div class="a">بله — <code class="ltr">dorj-agent</code> و <code class="ltr">nova</code> برای ترمینال و CI. '
+               f'نصب: <code class="ltr">pip install --index-url {pip_index} --trusted-host {pip_host} {server}/download/{wheels[-1].name}</code> سپس <code class="ltr">dorj-agent login</code>. '
                f'گواهی ریشه‌ی سازمان: <a class="ltr" href="isigpu-root-ca.crt">isigpu-root-ca.crt</a>.</div>\n    </details>\n    ')
     sub(r"<details>\s*<summary>[^<]*به اشتراک AI", faq_cli + "<details>\n      <summary>به اشتراک AI", required=False, count=1)
 assert "172.16.40.188" not in html
