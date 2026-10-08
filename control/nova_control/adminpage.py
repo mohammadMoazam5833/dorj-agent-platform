@@ -37,7 +37,7 @@ EDITS = [
 }'''),
     ('placeholder="نام کاربری مثلاً node3"', 'placeholder="نام کاربری Active Directory (مثلاً ali)"'),
     ('<span class="mut">رمز، همان لاگین پورتال NovaAgent است</span>', '<span class="mut">کاربران با حساب سازمانی (Active Directory) وارد اپ می‌شوند</span>'),
-    ('<th>پورت</th>', '<th>Workspace</th>'),
+    ('L("Port","پورت")', 'L("Workspace","فضای کاری")'),
     ('<title>NovaAgent | پنل مدیریت</title>', '<title>دستیار دُرج | پنل مدیریت</title>'),
     (':root{--bg:#0d0d0f;--card:#161619;--card2:#1d1d21;--line:#2a2a30;--tx:#ececf1;--tx2:#9a9aa5;--acc:#d97757;--acc2:#8b7cf6;--ok:#3fb950;--bad:#f85149;--warn:#d29922}',
      ':root{--bg:#0B1B3A;--card:#11244e;--card2:#183567;--line:#2b4a8f;--tx:#f5f7fb;--tx2:#b7c3db;--acc:#E8A317;--acc2:#F4C24B;--ok:#3fb950;--bad:#f85149;--warn:#d29922}\n'
@@ -63,9 +63,9 @@ def _logo_uri() -> str:
     if logo_file.is_file():
         return "data:image/png;base64," + base64.b64encode(logo_file.read_bytes()).decode("ascii")
     return (
-        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E"
-        "%3Crect width='64' height='64' rx='14' fill='%230B1B3A'/%3E"
-        "%3Cpath d='M23 47V17h11c9 0 16 6 16 15s-7 15-16 15z' fill='%23fff'/%3E%3C/svg%3E"
+        "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E"
+        "%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%230B1B3A%22/%3E"
+        "%3Cpath d=%22M23 47V17h11c9 0 16 6 16 15s-7 15-16 15z%22 fill=%22%23fff%22/%3E%3C/svg%3E"
     )
 
 
@@ -77,7 +77,7 @@ def render() -> str:
     # evaluate the JS template literal's escapes (the PAGE has no ${} interpolations)
     if "${" in page:
         raise RuntimeError("nova-admin PAGE gained template interpolations; update adminpage.py")
-    page = re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), page, flags=re.S)
+    page = re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), "\\" + m.group(1)), page, flags=re.S)
     logo = _logo_uri()
     page = page.replace("__FAVICON__", logo)
     for old, new in EDITS:

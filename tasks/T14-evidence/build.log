@@ -1,0 +1,48 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 909B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for 172.16.50.89:5000/python:3.12-slim
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/8] FROM 172.16.50.89:5000/python:3.12-slim
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 43.36kB 0.0s done
+#5 DONE 0.1s
+
+#6 [2/8] WORKDIR /app
+#6 CACHED
+
+#7 [3/8] COPY requirements.txt .
+#7 CACHED
+
+#8 [4/8] RUN pip install --no-cache-dir --index-url "http://172.16.50.89:8083/repository/pypi-proxy/simple" --trusted-host "172.16.50.89" -r requirements.txt
+#8 CACHED
+
+#9 [5/8] COPY nova_control ./nova_control
+#9 DONE 0.1s
+
+#10 [6/8] COPY web /srv/nova-web
+#10 DONE 0.2s
+
+#11 [7/8] COPY admin-src /srv/nova-admin
+#11 DONE 0.0s
+
+#12 [8/8] RUN useradd -u 10002 -m nova
+#12 DONE 1.4s
+
+#13 exporting to image
+#13 exporting layers 0.1s done
+#13 writing image sha256:23607cbce5abdd94d019a6e6c57df3a52d0fa05a73f0ec1e541dec758f1f74ee
+#13 writing image sha256:23607cbce5abdd94d019a6e6c57df3a52d0fa05a73f0ec1e541dec758f1f74ee 1.1s done
+#13 naming to docker.io/library/nova-control:t14-evidence
+#13 naming to docker.io/library/nova-control:t14-evidence done
+#13 DONE 1.2s

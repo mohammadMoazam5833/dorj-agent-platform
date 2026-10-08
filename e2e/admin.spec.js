@@ -7,6 +7,17 @@ import path from 'node:path'
 const N = 'https://nova.isigpu.local'
 const SHOTS = process.env.NOVA_SHOTS || '.'
 
+function tableCard(page, id) {
+  return page.locator(`[data-table-id="${id}"]`)
+}
+
+async function expectTableChrome(page, id) {
+  const table = tableCard(page, id)
+  await expect(table.locator('[data-table-filter]')).toBeVisible()
+  await expect(table.locator('[data-table-page-label]')).toBeVisible()
+  await expect(table.locator('[data-table-sort]').first()).toBeVisible()
+}
+
 test('admin panel: sign in, dashboard, users, conversations, logs', async ({ page }) => {
   const errors = []
   page.on('pageerror', e => errors.push(e.message))
@@ -29,23 +40,34 @@ test('admin panel: sign in, dashboard, users, conversations, logs', async ({ pag
   await page.waitForTimeout(1500)
   await page.screenshot({ path: path.join(SHOTS, 'nova-admin-dash.png'), fullPage: true })
 
+  // shared table controls: search, sortable headers and pagination chrome
+  await expectTableChrome(page, 'services')
+  const servicesTable = tableCard(page, 'services')
+  await servicesTable.locator('[data-table-filter]').fill('nova-gateway')
+  await expect(servicesTable.locator('tbody tr', { hasText: 'nova-gateway' })).toHaveCount(1)
+  await servicesTable.locator('[data-table-filter]').fill('')
+  await servicesTable.locator('[data-table-sort][data-key="unit"]').click()
+
   // users: the signed-in admin is a tenant with a workspace
   await page.locator('.tab[data-t="tenants"]').click()
   const me = process.env.E2E_USER.split('@')[0]
   await expect(page.locator('tbody tr', { hasText: me }).first()).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('خروج دستگاه‌ها').first()).toBeVisible()
   await page.screenshot({ path: path.join(SHOTS, 'nova-admin-tenants.png'), fullPage: true })
+  await expectTableChrome(page, 'tenants')
 
   // conversations of that user, logs of the control plane
   await page.locator('.tab[data-t="convs"]').click()
   await page.waitForTimeout(2500)
   await page.screenshot({ path: path.join(SHOTS, 'nova-admin-convs.png'), fullPage: true })
+  await expectTableChrome(page, 'convs')
   const convs = await page.evaluate(async (t) => (await fetch('/admin/api/conversations?tenant=' + t)).status, me)
   expect([200, 502]).toContain(convs)
   await page.locator('.tab[data-t="logs"]').click()
   await page.waitForTimeout(2500)
   const logs = await page.evaluate(async () => (await (await fetch('/admin/api/logs?unit=nova-control&lines=20')).json()).lines || '')
   expect(logs.length).toBeGreaterThan(0)
+  await expectTableChrome(page, 'logs')
 
   const llm = await page.evaluate(async () => (await fetch('/admin/api/llm')).json())
   expect(llm.remote.ok).toBe(true)
