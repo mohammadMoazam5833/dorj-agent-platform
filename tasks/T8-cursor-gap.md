@@ -34,3 +34,11 @@ Proposed Phase 1 (CTO view, GLM may challenge with evidence):
 3. Checkpoints (restore the workspace to before any agent step).
 4. @-mentions for files/folders/rules in the composer.
 Phase 2: codebase indexing + semantic search on our Jina models.
+
+## Phase 1 status (2026-10-08 04:40)
+- #1 destructive-command gate: LIVE (agent-server nova14). Verified: `rm -rf build` paused, folder intact.
+  Follow-up: the CLI waits until timeout on WAITING_FOR_CONFIRMATION - print a clear bilingual
+  "needs your confirmation" message with an approve/reject prompt (or --yes flag) and exit cleanly.
+- #2 keep/undo per file + #3 checkpoints: backend LIVE (auto checkpoint verified live before an edit);
+  UI committed in NovaAgent 3bc0e11, ships with the next nova-control build together with T12.
+- #4 @-mentions: GLM, tasks/T12-at-mentions.md.
