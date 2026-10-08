@@ -51,6 +51,7 @@ test('dorj-agent CLI: auth, models, usage, reverse-workspace run, logout', async
 })
 
 test('dorj-agent CLI asks for destructive command confirmation and supports --yes', async () => {
+  test.setTimeout(900_000)
   expect(process.env.NOVA_CA_BUNDLE, 'NOVA_CA_BUNDLE must point at the org root CA').toBeTruthy()
   expect(nova(['login', '-u', process.env.E2E_USER], { NOVA_PASSWORD: process.env.E2E_PASS }).status).toBe(0)
 
@@ -60,14 +61,37 @@ test('dorj-agent CLI asks for destructive command confirmation and supports --ye
   spawnSync('mkdir', ['-p', buildDir])
   spawnSync('touch', [path.join(buildDir, 'keep')])
 
-  const rejected = nova(['run', 'Run exactly: rm -rf build', '--timeout', '540'], {}, confirmationWork)
+  // The destructive gate is deterministic, but qwen3 can answer with a question or a plan instead
+  // of invoking the terminal. Retry with stricter wording before failing the test.
+  const prompts = [
+    'Run exactly: rm -rf build',
+    'Use the terminal now. Run exactly this shell command, with no planning and no questions: rm -rf build',
+    'Execute this exact shell command immediately: rm -rf build',
+  ]
+
+  function runConfirmationPrompts(extraArgs) {
+    const attempts = []
+    for (const prompt of prompts) {
+      const result = nova(['run', prompt, ...extraArgs, '--timeout', '120'], {}, confirmationWork)
+      attempts.push(`status=${result.status}\n${result.stdout}\n${result.stderr}`)
+      if (result.status === 5 || result.stderr.includes('در انتظار تأیید:')) return { result, attempts }
+      expect(result.status, `CLI failed before confirmation:\n${attempts.at(-1)}`).toBe(0)
+      if (!existsSync(buildDir)) {
+        throw new Error(`build/ was removed without a confirmation request:\n${attempts.at(-1)}`)
+      }
+    }
+    throw new Error(`the model did not request destructive-command confirmation in ${prompts.length} attempts:\n${attempts.join('\n---\n')}`)
+  }
+
+  const { result: rejected } = runConfirmationPrompts([])
   expect(rejected.status, `${rejected.stdout}\n${rejected.stderr}`).toBe(5)
   expect(rejected.stderr).toMatch(/تأیید شما را لازم دارد/)
   expect(rejected.stderr).toMatch(/ورودی تعاملی نیست/)
   expect(existsSync(buildDir), 'the rejected command must not run').toBe(true)
 
-  const approved = nova(['run', 'Run exactly: rm -rf build', '--yes', '--timeout', '540'], {}, confirmationWork)
+  const { result: approved } = runConfirmationPrompts(['--yes'])
   expect(approved.status, `${approved.stdout}\n${approved.stderr}`).toBe(0)
+  expect(approved.stderr).toMatch(/در انتظار تأیید:/)
   expect(existsSync(buildDir), 'the approved command must remove build/').toBe(false)
 
   expect(nova(['logout']).status).toBe(0)
