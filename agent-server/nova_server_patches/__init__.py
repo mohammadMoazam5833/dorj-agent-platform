@@ -468,6 +468,95 @@ def _install_command_gate() -> None:
     logger.info("nova_server_patches: destructive-command gate installed")
 
 
+def _install_workspace_git() -> None:
+    """Changes tab, accept/revert and checkpoints on the customer's PC (see workspace_git.py)."""
+    import asyncio
+
+    from fastapi import Body, HTTPException, Query
+
+    from openhands.agent_server import event_service as _es
+    from openhands.agent_server import git_router as gr
+
+    from . import workspace_git as wg
+
+    def on_pc(path) -> bool:
+        p = str(path)
+        return bridged() and (bool(_WIN_PATH.match(p)) or under_roots(p, customer_roots()))
+
+    for name, bridged_fn in (("get_git_changes", wg.changes), ("get_git_diff", wg.diff)):
+        original = getattr(gr, name)
+        if getattr(original, "_nova_wrapped", False):
+            continue
+
+        def make(original, bridged_fn):
+            @functools.wraps(original)
+            def wrapped(path, *args, **kwargs):
+                if not on_pc(path):
+                    return original(path, *args, **kwargs)
+                try:
+                    return bridged_fn(str(path))
+                except wg.BridgeGitError as exc:
+                    from openhands.sdk.git.exceptions import GitRepositoryError
+                    raise GitRepositoryError(str(exc)) from exc
+            wrapped._nova_wrapped = True
+            return wrapped
+
+        setattr(gr, name, make(original, bridged_fn))
+
+    if getattr(gr.git_router, "_nova_routes", False):
+        return
+
+    async def call(fn, *args):
+        try:
+            return await asyncio.get_running_loop().run_in_executor(None, fn, *args)
+        except wg.BridgeGitError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @gr.git_router.post("/accept")
+    async def git_accept(path: str = Body(..., embed=True)) -> dict:
+        """Keep the agent's change to one file (stage it)."""
+        return await call(wg.accept, path)
+
+    @gr.git_router.post("/revert")
+    async def git_revert(path: str = Body(..., embed=True)) -> dict:
+        """Discard the agent's change to one file."""
+        return await call(wg.revert, path)
+
+    @gr.git_router.get("/checkpoints")
+    async def git_checkpoints(path: str = Query(...)) -> list[dict]:
+        return await call(wg.list_checkpoints, path)
+
+    @gr.git_router.post("/checkpoints")
+    async def git_checkpoint_create(path: str = Body(...), label: str = Body("")) -> dict:
+        return await call(wg.create_checkpoint, path, label)
+
+    @gr.git_router.post("/checkpoints/restore")
+    async def git_checkpoint_restore(path: str = Body(...), id: str = Body(...)) -> dict:
+        return await call(wg.restore_checkpoint, path, id)
+
+    gr.git_router._nova_routes = True
+
+    # automatic checkpoint before every user message (best effort, never blocks the message)
+    original_send = _es.EventService.send_message
+    if not getattr(original_send, "_nova_wrapped", False):
+        @functools.wraps(original_send)
+        async def send_message(self, message, *args, **kwargs):
+            try:
+                wd = str(getattr(getattr(self.stored, "workspace", None), "working_dir", "") or "")
+                if wd and on_pc(wd):
+                    text = " ".join(getattr(c, "text", "") for c in (getattr(message, "content", None) or []))
+                    await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(
+                        None, wg.create_checkpoint, wd, text.strip()[:120]), timeout=20)
+            except Exception as exc:  # not a git repo / customer offline: no checkpoint
+                logger.debug("auto checkpoint skipped: %s", exc)
+            return await original_send(self, message, *args, **kwargs)
+
+        send_message._nova_wrapped = True
+        _es.EventService.send_message = send_message
+    logger.info("nova_server_patches: bridged git (changes/diff/accept/revert/checkpoints) installed")
+
+
 _install()
 _install_memory()
 _install_command_gate()
+_install_workspace_git()
