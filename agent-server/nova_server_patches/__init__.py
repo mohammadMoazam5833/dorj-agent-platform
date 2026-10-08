@@ -89,6 +89,7 @@ def customer_system_prompt() -> str:
     shell_kind = ("PowerShell" if "powershell" in shell.lower() else "Git Bash" if "bash" in shell.lower() and plat == "Windows"
                   else shell or "the default shell")
     runtimes = sysinfo.get("runtimes") if isinstance(sysinfo.get("runtimes"), dict) else {}
+    gpus = sysinfo.get("gpus") if isinstance(sysinfo.get("gpus"), list) else []
     lines = [
         "<USER_MACHINE>",
         "All your file and terminal tools run on the user's own computer (through the Dorj Agent app), "
@@ -100,6 +101,8 @@ def customer_system_prompt() -> str:
         "- Installed runtimes: " + (", ".join(f"{k} {v}" for k, v in runtimes.items()) if runtimes
                                     else "none detected - ask before installing anything"),
     ]
+    if gpus:
+        lines.append("- GPUs: " + ", ".join(str(gpu) for gpu in gpus if str(gpu).strip()))
     if plat == "Windows":
         lines.append("- Use Windows paths (C:\\...) and commands valid in that shell; there is no Linux userland unless Git Bash/WSL is listed.")
     lines.append("Never install system-wide software or change system settings on this machine without the user's explicit consent.")

@@ -205,6 +205,19 @@ class WorkspaceBridge:
         roots = self.hello.get("roots")
         return [str(root) for root in roots] if isinstance(roots, list) else []
 
+    async def wait_closed(self) -> None:
+        """Wait until the gateway closes the workspace connection."""
+        reader = self._reader
+        if reader is None or reader.done():
+            return
+        try:
+            await reader
+        except asyncio.CancelledError:
+            # close() cancels the reader as part of normal cleanup. Preserve a real
+            # cancellation of the task that is waiting for the bridge to stop.
+            if not reader.cancelled():
+                raise
+
     async def close(self) -> None:
         if self._reader and not self._reader.done():
             self._reader.cancel()

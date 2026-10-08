@@ -7,8 +7,13 @@ keeping exactly the same wire protocol used by the desktop app's sidecar.
 
 from __future__ import annotations
 
+import getpass
 import os
+import platform
+import shutil
+import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -57,12 +62,93 @@ def _error_from_exception(exc: BaseException) -> WorkspaceOperationError:
     return _error("exec_failed", str(exc))
 
 
+def _tool_output(argv: list[str], timeout_s: float) -> str:
+    """Best-effort output from a tool; never fails host-info collection."""
+    executable = shutil.which(argv[0])
+    if executable is None:
+        return ""
+    try:
+        completed = subprocess.run(
+            [executable, *argv[1:]],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return (completed.stdout or completed.stderr).strip()
+
+
+def _first_output_line(argv: list[str], timeout_s: float = 1.0) -> str | None:
+    output = _tool_output(argv, timeout_s)
+    return output.splitlines()[0].strip() if output else None
+
+
+def _runtime_versions() -> dict[str, str]:
+    """Common runtimes useful to the agent; values are short version strings."""
+    versions = {"Python": ".".join(map(str, sys.version_info[:3]))}
+    for name, argv in (
+        ("Node", ["node", "--version"]),
+        ("npm", ["npm", "--version"]),
+        ("pnpm", ["pnpm", "--version"]),
+        ("yarn", ["yarn", "--version"]),
+        ("Bun", ["bun", "--version"]),
+        ("Deno", ["deno", "--version"]),
+        ("Java", ["java", "-version"]),
+        ("Go", ["go", "version"]),
+        ("Git", ["git", "--version"]),
+        ("Docker", ["docker", "--version"]),
+    ):
+        line = _first_output_line(argv)
+        if line:
+            versions[name] = line
+    return versions
+
+
+def _gpu_lines() -> list[str]:
+    """GPU identity from nvidia-smi, when available (best effort only)."""
+    output = _tool_output(["nvidia-smi", "-L"], 2.0)
+    return [line.strip() for line in output.splitlines() if line.strip().startswith("GPU ")]
+
+
+def _shell_path() -> str:
+    if os.name == "nt":
+        return os.environ.get("COMSPEC", "")
+    return os.environ.get("SHELL") or ""
+
+
+def _current_user() -> str:
+    try:
+        return getpass.getuser()
+    except Exception:  # noqa: BLE001 - system info must never break the bridge
+        return os.environ.get("USER") or os.environ.get("USERNAME") or ""
+
+
+def host_system_info() -> dict[str, Any]:
+    """Describe the machine that will execute file/terminal operations."""
+    return {
+        "platform": sys.platform,
+        "os": platform.system(),
+        "release": platform.release(),
+        "arch": platform.machine(),
+        "hostname": socket.gethostname(),
+        "user": _current_user(),
+        "home": str(Path.home()),
+        "shell": _shell_path(),
+        "runtimes": _runtime_versions(),
+        "gpus": _gpu_lines(),
+    }
+
+
 def handle_hello(root: Path) -> dict[str, Any]:
     return {
         "protocol": PROTOCOL_VERSION,
         "roots": [str(root.resolve(strict=False))],
         "host": "dorj-agent-cli",
         "port": 0,
+        "system": host_system_info(),
     }
 
 

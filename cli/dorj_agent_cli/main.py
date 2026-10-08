@@ -15,10 +15,13 @@ import asyncio
 import getpass
 import json
 import os
+import socket
+import subprocess
 import sys
 import time
 from contextlib import AsyncExitStack
 from pathlib import Path
+from typing import Awaitable, Callable
 
 import httpx
 
@@ -388,6 +391,149 @@ def cmd_chat(a):
     )
 
 
+def _validate_bridge_root(path: str | None) -> Path:
+    root = Path(path or Path.cwd()).expanduser().resolve(strict=False)
+    if not root.exists():
+        raise WorkspaceConnectionError(
+            tr(f"workspace root does not exist: {root}", f"ریشه‌ی فضای کار وجود ندارد: {root}")
+        )
+    if not root.is_dir():
+        raise WorkspaceConnectionError(
+            tr(f"workspace root is not a directory: {root}", f"ریشه‌ی فضای کار یک پوشه نیست: {root}")
+        )
+    return root
+
+
+def _print_bilingual(en: str, fa: str) -> None:
+    print(en, file=sys.stderr, flush=True)
+    print(fa, file=sys.stderr, flush=True)
+
+
+def _bridge_hostname(bridge: WorkspaceBridge) -> str:
+    hello = bridge.hello if isinstance(bridge.hello, dict) else {}
+    system = hello.get("system") if isinstance(hello.get("system"), dict) else {}
+    return str(system.get("hostname") or socket.gethostname())
+
+
+def _session_replaced(detail: str, close_code: int | None) -> bool:
+    return close_code == 4001 or "4001" in detail or "session_replaced" in detail
+
+
+async def _bridge_forever(
+    server: str,
+    token: str,
+    root: Path,
+    *,
+    bridge_factory: Callable[..., WorkspaceBridge] = WorkspaceBridge,
+    sleep: Callable[[float], Awaitable[None]] | None = None,
+) -> int:
+    """Keep a reverse workspace tunnel open; reconnect after transient failures."""
+    do_sleep = sleep or asyncio.sleep
+    attempts, was_connected, delay = 0, False, 1
+    while True:
+        bridge = bridge_factory(server, token, root)
+        try:
+            async with bridge:
+                was_connected, attempts = True, 0
+                hostname = _bridge_hostname(bridge)
+                _print_bilingual(
+                    f"Workspace connected on {hostname}:{root}. Keep this window open.",
+                    f"فضای کار روی {hostname}:{root} وصل است. این پنجره را باز نگه دارید.",
+                )
+                await bridge.wait_closed()
+                was_connected = False
+                detail = bridge.close_reason or "connection closed"
+                if _session_replaced(detail, bridge.close_code):
+                    _print_bilingual(
+                        "Workspace bridge stopped: session replaced on the gateway.",
+                        "پل فضای کاری متوقف شد: نشست روی gateway جایگزین شد.",
+                    )
+                    return EXIT_OK
+                _print_bilingual(
+                    f"Workspace bridge disconnected ({detail or 'unknown reason'}).",
+                    f"پل فضای کاری قطع شد ({detail or 'دلیل نامشخص'}).",
+                )
+        except WorkspaceConnectionError as exc:
+            detail = str(exc)
+            close_code = getattr(exc, "close_code", bridge.close_code)
+            if _session_replaced(detail, close_code):
+                _print_bilingual(
+                    "Workspace bridge stopped: session replaced on the gateway.",
+                    "پل فضای کاری متوقف شد: نشست روی gateway جایگزین شد.",
+                )
+                return EXIT_OK
+            attempts += 1
+            delay = 1 if was_connected else min(30, 2 ** (attempts - 1))
+            was_connected = False
+            _print_bilingual(
+                f"Workspace bridge failed ({detail}); reconnecting in {delay}s.",
+                f"پل فضای کاری ناموفق بود ({detail})؛ اتصال مجدد پس از {delay} ثانیه.",
+            )
+        except OSError as exc:
+            attempts += 1
+            delay = 1 if was_connected else min(30, 2 ** (attempts - 1))
+            was_connected = False
+            _print_bilingual(
+                f"Workspace bridge failed ({exc}); reconnecting in {delay}s.",
+                f"پل فضای کاری ناموفق بود ({exc})؛ اتصال مجدد پس از {delay} ثانیه.",
+            )
+        await do_sleep(delay)
+
+
+def _bridge_config_dir() -> Path:
+    # auth.CONFIG_DIR is normally ~/.config/nova; bridge files belong beside it.
+    return auth.CONFIG_DIR.parent / "dorj-agent"
+
+
+def _detach_bridge(root: Path) -> int:
+    auth.bearer()  # Fail before daemonizing when the CLI is not signed in.
+    config_dir = _bridge_config_dir()
+    config_dir.mkdir(parents=True, exist_ok=True)
+    log_path = config_dir / "bridge.log"
+    pid_path = config_dir / "bridge.pid"
+    argv = [sys.executable, "-m", "dorj_agent_cli.main", "bridge", "--root", str(root)]
+    kwargs: dict[str, object] = {"stdin": subprocess.DEVNULL}
+    if os.name == "nt":
+        detached_process = getattr(subprocess, "DETACHED_PROCESS", 0)
+        create_new_process_group = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        kwargs["creationflags"] = detached_process | create_new_process_group
+    else:
+        kwargs["start_new_session"] = True
+    with log_path.open("a", encoding="utf-8", buffering=1) as log:
+        process = subprocess.Popen(
+            argv,
+            stdout=log,
+            stderr=log,
+            close_fds=True,
+            **kwargs,
+        )
+    pid_path.write_text(str(process.pid), encoding="utf-8")
+    _print_bilingual(
+        f"Workspace bridge started in the background (pid {process.pid}). Logs: {log_path}",
+        f"پل فضای کاری در پس‌زمینه اجرا شد (pid {process.pid}). لاگ‌ها: {log_path}",
+    )
+    return EXIT_OK
+
+
+async def _run_bridge(root: Path) -> int:
+    server, token = auth.bearer()
+    return await _bridge_forever(server, token, root)
+
+
+def cmd_bridge(a):
+    try:
+        root = _validate_bridge_root(a.root)
+        if a.detach:
+            return _detach_bridge(root)
+        return asyncio.run(_run_bridge(root))
+    except KeyboardInterrupt:
+        _print_bilingual(
+            "Workspace bridge closed.",
+            "پل فضای کاری بسته شد.",
+        )
+        return EXIT_OK
+
+
 def cmd_conversations(a):
     api = Api()
     res = api.req("GET", "/api/conversations/search", params={"limit": a.limit})
@@ -504,6 +650,30 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("conversations", help=tr("list conversations", "فهرست گفتگوها"))
     s.add_argument("--limit", type=int, default=20)
     s.set_defaults(fn=cmd_conversations)
+
+    s = sub.add_parser(
+        "bridge",
+        help=tr("keep a remote folder connected as the workspace", "اتصال دائمی یک پوشه‌ی راه دور به‌عنوان فضای کار"),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=tr(
+            "Works on a server, in WSL, or in a notebook/VM. It replaces the desktop app's "
+            "workspace tunnel for the same account. Exit codes: 0 clean stop or Ctrl+C, "
+            "1 error, 2 bad arguments, 3 sign-in, 4 workspace connection.",
+            "روی سرور، WSL یا نوت‌بوک/VM کار می‌کند و تونل فضای کاری همان حساب در برنامه‌ی "
+            "دسکتاپ را جایگزین می‌کند. کدهای خروج: 0 توقف تمیز یا Ctrl+C، 1 خطا، "
+            "2 آرگومان نامعتبر، 3 ورود، 4 اتصال فضای کاری.",
+        ),
+    )
+    s.add_argument("--root", help=tr("folder to expose (default: current directory)", "پوشه‌ی قابل‌دسترس (پیش‌فرض: پوشه‌ی فعلی)"))
+    s.add_argument(
+        "--detach",
+        action="store_true",
+        help=tr(
+            "run in the background; logs to ~/.config/dorj-agent/bridge.log",
+            "اجرا در پس‌زمینه؛ لاگ در ‎~/.config/dorj-agent/bridge.log",
+        ),
+    )
+    s.set_defaults(fn=cmd_bridge)
 
     s = sub.add_parser("ws", help=tr("agent-server workspace", "فضای کاری agent-server"))
     s.add_argument("action", choices=["status", "start", "stop"])
