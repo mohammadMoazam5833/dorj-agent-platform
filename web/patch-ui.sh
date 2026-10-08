@@ -82,7 +82,7 @@ for (const name of [
   if (fs.existsSync(src)) fs.copyFileSync(src, path.join("public", name));
 }
 let root = fs.readFileSync("src/root.tsx", "utf8");
-root = root.replace('{ name: "description", content: "Let\'s Start Building!" }', '{ name: "description", content: "Dorj Agent" }');
+root = root.replace(/\{ name: "description", content: "[^"]*" \}/, '{ name: "description", content: "Dorj Agent" }');
 if (root.includes('{ name: "description", content: "Dorj Agent" }') === false) throw new Error("description replacement failed");
 fs.writeFileSync("src/root.tsx", root);
 if (fs.existsSync("index.html")) {
