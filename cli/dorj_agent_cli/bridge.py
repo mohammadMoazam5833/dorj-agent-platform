@@ -86,7 +86,7 @@ class WorkspaceBridge:
             "open_timeout": 10,
             "ping_interval": 20,
             "ping_timeout": 20,
-            "max_size": 8 * 1024 * 1024,
+            "max_size": 48 * 1024 * 1024,
             "proxy": None,
         }
         ssl_context = self._ssl_context()

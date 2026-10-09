@@ -7,6 +7,8 @@ keeping exactly the same wire protocol used by the desktop app's sidecar.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import getpass
 import os
 import platform
@@ -20,6 +22,7 @@ from typing import Any
 
 PROTOCOL_VERSION = 1
 READ_FILE_MAX_BYTES = 2 * 1024 * 1024
+BASE64_FILE_MAX_BYTES = 25 * 1024 * 1024
 DEFAULT_EXEC_TIMEOUT_MS = 30_000
 MAX_CAPTURE_BYTES = READ_FILE_MAX_BYTES
 
@@ -145,6 +148,7 @@ def host_system_info() -> dict[str, Any]:
 def handle_hello(root: Path) -> dict[str, Any]:
     return {
         "protocol": PROTOCOL_VERSION,
+        "capabilities": ["file_base64"],
         "roots": [str(root.resolve(strict=False))],
         "host": "dorj-agent-cli",
         "port": 0,
@@ -176,12 +180,22 @@ def handle_read_file(root: Path, params: dict[str, Any]) -> dict[str, Any]:
         absolute = resolve_under_root(params.get("path"), root, must_exist=True)
         if not absolute.is_file():
             raise _error("invalid_request", "path is not a file")
+        encoding = params.get("encoding", "utf-8")
+        if encoding not in {"utf-8", "base64"}:
+            raise _error("invalid_request", "params.encoding must be utf-8 or base64")
+        max_bytes = BASE64_FILE_MAX_BYTES if encoding == "base64" else READ_FILE_MAX_BYTES
         size = absolute.stat().st_size
-        if size > READ_FILE_MAX_BYTES:
-            raise _error("too_large", f"file exceeds max size ({size} > {READ_FILE_MAX_BYTES} bytes)")
+        if size > max_bytes:
+            raise _error("too_large", f"file exceeds max size ({size} > {max_bytes} bytes)")
+        if encoding == "base64":
+            return {
+                "path": str(absolute),
+                "encoding": encoding,
+                "content": base64.b64encode(absolute.read_bytes()).decode("ascii"),
+            }
         return {
             "path": str(absolute),
-            "encoding": "utf-8",
+            "encoding": encoding,
             "content": absolute.read_text(encoding="utf-8"),
         }
     except UnicodeDecodeError as exc:
@@ -196,9 +210,23 @@ def handle_write_file(root: Path, params: dict[str, Any]) -> dict[str, Any]:
         content = params.get("content")
         if not isinstance(content, str):
             raise _error("invalid_request", "params.content must be a string")
+        encoding = params.get("encoding", "utf-8")
+        if encoding not in {"utf-8", "base64"}:
+            raise _error("invalid_request", "params.encoding must be utf-8 or base64")
+        if encoding == "base64":
+            try:
+                data = base64.b64decode(content, validate=True)
+            except (ValueError, binascii.Error) as exc:
+                raise _error("invalid_request", "params.content is not valid base64") from exc
+            if len(data) > BASE64_FILE_MAX_BYTES:
+                raise _error(
+                    "too_large",
+                    f"file exceeds max base64 size ({len(data)} > {BASE64_FILE_MAX_BYTES} bytes)",
+                )
+        else:
+            data = content.encode("utf-8")
         if params.get("create_parents"):
             absolute.parent.mkdir(parents=True, exist_ok=True)
-        data = content.encode("utf-8")
         absolute.write_bytes(data)
         return {"path": str(absolute), "bytes_written": len(data)}
     except BaseException as exc:  # noqa: BLE001
