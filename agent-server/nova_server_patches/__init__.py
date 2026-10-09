@@ -733,7 +733,12 @@ def _install_workspace_files() -> None:
         if ".." in parts:
             raise HTTPException(status_code=400, detail="Path is outside the workspace")
         sep = "\\" if _WIN_PATH.match(workspace_dir) else "/"
-        target = sep.join([str(workspace_dir), *parts])
+        if _WIN_PATH.match(file_path or ""):  # the agent showed an absolute PC path (canvas_ui_control)
+            if not under_roots(file_path, customer_roots()):
+                raise HTTPException(status_code=400, detail="Path is outside the shared folders")
+            target = file_path[:2] + "\\" + "\\".join(parts[1:])
+        else:
+            target = sep.join([str(workspace_dir), *parts])
         for candidate in ([target] if parts else []) + [target + sep + "index.html"]:
             try:
                 body = read(candidate)
@@ -752,9 +757,51 @@ def _install_workspace_files() -> None:
     logger.info("nova_server_patches: conversation workspace files served from the customer PC")
 
 
+# --- Panel commands on the PC (2026-10-09): the Files tab lists the workspace with `find` through
+# POST /api/bash/execute_bash_command (and the Terminal tab uses start_bash_command). Those ran a
+# subprocess on THIS pod, so with a PC working dir the Files tab stayed empty ("No such file or
+# directory: C:\\Users\\..."). Run them through the sidecar like the agent's terminal tool.
+def _install_bash_bridge() -> None:
+    import asyncio
+
+    from openhands.agent_server import bash_service as bs
+    from openhands.agent_server.models import BashOutput
+
+    orig = bs.BashEventService._execute_bash_command
+    if getattr(orig, "_nova_wrapped", False):
+        return
+
+    @functools.wraps(orig)
+    async def execute(self, command):
+        cwd = str(command.cwd or "")
+        if not (cwd and bridged() and (_WIN_PATH.match(cwd) or under_roots(cwd, customer_roots()))):
+            return await orig(self, command)
+        try:
+            from sidecar_bridge.client import client_from_env
+
+            client = client_from_env()
+            if client is None:
+                raise RuntimeError("workspace is not connected")
+            res = await asyncio.to_thread(client.exec, ["/bin/bash", "-lc", command.command or "true"],  # = the agent terminal (Git Bash on Windows)
+                                          cwd=cwd, timeout_ms=max(1, int(command.timeout)) * 1000)
+            out = BashOutput(command_id=command.id, order=0,
+                             exit_code=-1 if res.get("timed_out") else int(res.get("exit_code") or 0),
+                             stdout=res.get("stdout") or None, stderr=res.get("stderr") or None)
+        except Exception as exc:  # noqa: BLE001 - reported to the caller like the original
+            out = BashOutput(command_id=command.id, order=0, exit_code=-1,
+                             stderr=f"Error executing command on your computer: {exc}")
+        self._save_event_to_file(out)
+        await self._pub_sub(out)
+
+    execute._nova_wrapped = True
+    bs.BashEventService._execute_bash_command = execute
+    logger.info("nova_server_patches: panel bash commands run on the customer PC")
+
+
 _install()
 _install_memory()
 _install_command_gate()
 _install_workspace_git()
 _install_file_bridge()
 _install_workspace_files()
+_install_bash_bridge()

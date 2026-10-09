@@ -71,6 +71,18 @@ try: wr._serve_path(d, "../etc/passwd"); raise SystemExit("traversal must fail")
 except HTTPException as e: assert e.status_code == 400
 try: wr._serve_path(d, "missing.py"); raise SystemExit("expected 404")
 except HTTPException as e: assert e.status_code == 404
+try: wr._serve_path(d, "C:\\Windows\\win.ini"); raise SystemExit("PC path outside roots must fail")
+except HTTPException as e: assert e.status_code == 400, e.detail
+# panel bash commands (Files tab listing, Terminal tab) run on the PC
+from openhands.agent_server.bash_service import BashEventService
+from openhands.agent_server.models import ExecuteBashRequest
+from pathlib import Path as _P; bsvc = BashEventService(bash_events_dir=_P(tempfile.mkdtemp()))
+async def run_bash(cmd, cwd):
+    c, t = await bsvc.start_bash_command(ExecuteBashRequest(command=cmd, cwd=cwd, timeout=20)); await t
+    return (await bsvc.search_bash_events(command_id__eq=c.id)).items[-1]
+o = asyncio.run(run_bash("find . -type f -name '*.txt' | sort", root))
+assert o.exit_code == 0 and "./sub/a.txt" in o.stdout, o
+o = asyncio.run(run_bash("echo server", "/tmp")); assert o.stdout.strip() == "server"  # non-PC unchanged
 # commits section on the PC
 import subprocess
 def sh(*a): subprocess.run(a, cwd=root, check=True, capture_output=True)
