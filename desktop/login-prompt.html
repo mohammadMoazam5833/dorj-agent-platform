@@ -12,8 +12,9 @@
   @font-face { font-family: 'Vazirmatn'; src: url(vazirmatn-400.woff2) format('woff2'); font-weight: 400; font-display: block; }
   @font-face { font-family: 'Vazirmatn'; src: url(vazirmatn-600.woff2) format('woff2'); font-weight: 600 800; font-display: block; }
   :root {
-    --navy: #0B1B3A; --lapis: #1E3A8A; --lapis-700: #16295e; --gold: #E8A317; --gold-soft: #F4C24B;
-    --surface: #f5f7fb; --text: #0c1a33; --muted: #56657f; --line: #dde5f0; --input: #16213a; --err: #b3261e;
+    /* Dorj Light tokens */
+    --navy: #1F1F1F; --lapis: #2563EB; --lapis-700: #1D4ED8; --accent: #2563EB; --accent-soft: #60A5FA;
+    --surface: #FFFFFF; --text: #1F1F1F; --muted: #555555; --line: #E5E5E7; --input: #1F1F1F; --err: #F85149;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
@@ -40,11 +41,11 @@
   @keyframes dShadow { 0%,100% { transform: scale(1); opacity: .75; } 50% { transform: scale(.72); opacity: .4; } }
   .lead { margin: 0; font-size: 29px; font-weight: 800; line-height: 1.65; color: #f3f6fc; max-width: 24ch; }
   .lead::after { content: ""; display: block; width: 54px; height: 3px; border-radius: 3px; margin-top: 18px;
-                 background: linear-gradient(90deg, var(--gold-soft), rgba(232,163,23,0)); }
+                 background: linear-gradient(90deg, var(--accent-soft), rgba(37,99,235,0)); }
   ul { list-style: none; display: flex; flex-direction: column; gap: 20px; padding: 0; margin: auto 0 0; }
   li { display: flex; align-items: flex-start; gap: 14px; }
   .ic { flex-shrink: 0; width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px;
-        color: var(--gold-soft); background: rgba(232,163,23,.10); border: 1px solid rgba(232,163,23,.24); }
+        color: var(--accent-soft); background: rgba(37,99,235,.10); border: 1px solid rgba(37,99,235,.24); }
   .feature b { display: block; font-size: 15.5px; color: #f3f6fc; }
   .feature span { font-size: 13px; color: rgba(210,220,240,.62); line-height: 1.6; }
 
@@ -93,20 +94,26 @@
   }
   @media (prefers-reduced-motion: reduce) { .d3 img, .d3::after, .card, .spinner { animation: none; } }
 
-  /* Dorj Graphite (2026-10-08): dark neutral sign-in like Cursor/Claude; gold only on the primary button */
-  body { background: #16171A; color: #E4E6EA; }
-  .brand { color: #E4E6EA; background: radial-gradient(120% 90% at 85% 10%, #2B2E34 0%, #1C1E22 45%, #0F1012 100%); }
-  .lead, .feature b { color: #F2F3F5; }
-  .feature span { color: rgba(228,230,234,.55); }
-  h1, label { color: #F2F3F5; }
-  .sub { color: #8A909B; }
-  .lang { color: #E4E6EA; background: #1D1F23; border-color: #2C2F35; }
-  .lang:hover { border-color: #7AA7FF; }
-  input { background: #1D1F23; border-color: #2C2F35; color: #E4E6EA; }
-  input:focus { border-color: #7AA7FF; background: #1D1F23; box-shadow: rgba(122,167,255,.18) 0 0 0 4px; }
-  .eye { color: #6B717C; } .eye:hover { color: #E4E6EA; }
-  button.primary { color: #0F1012; background: linear-gradient(120deg, #F4C24B 0%, #E8A317 100%); box-shadow: rgba(232,163,23,.28) 0 12px 26px -12px; }
-  button.primary:hover { box-shadow: rgba(232,163,23,.4) 0 16px 34px -12px; }
+  /* Dorj Dark tokens: neutral charcoal with one blue accent */
+  :root { --dorj-accent: #4C8DFF; --dorj-accent-hover: #6AA0FF; --dorj-border: rgba(255,255,255,.06); }
+  body { background: #181818; color: #E6E6E6; }
+  .brand { color: #E6E6E6; background: linear-gradient(160deg, #141414 0%, #1F1F1F 100%); }
+  .brand::after { background: linear-gradient(180deg, transparent, rgba(255,255,255,.08), transparent); }
+  .lead, .feature b { color: #E6E6E6; }
+  .lead::after { background: linear-gradient(90deg, var(--dorj-accent), rgba(76,141,255,0)); }
+  .feature span { color: #A3A3A3; }
+  .ic { color: var(--dorj-accent); background: rgba(76,141,255,.10); border-color: rgba(76,141,255,.24); }
+  h1, label { color: #E6E6E6; }
+  .sub { color: #A3A3A3; }
+  .lang { color: #E6E6E6; background: #262626; border-color: var(--dorj-border); }
+  .lang:hover { border-color: var(--dorj-accent); }
+  input { background: #262626; border-color: #2B2B2B; color: #E6E6E6; }
+  input:focus { border-color: var(--dorj-accent); background: #262626; box-shadow: rgba(76,141,255,.18) 0 0 0 4px; }
+  .eye { color: #6E6E6E; } .eye:hover { color: #E6E6E6; }
+  button.primary { color: #FFFFFF; background: var(--dorj-accent); box-shadow: rgba(76,141,255,.28) 0 12px 26px -12px; }
+  button.primary:hover { background: var(--dorj-accent-hover); box-shadow: rgba(76,141,255,.4) 0 16px 34px -12px; }
+  button.ghost:hover { color: var(--dorj-accent); }
+  .note svg { color: var(--dorj-accent); }
 </style>
 </head>
 <body>
