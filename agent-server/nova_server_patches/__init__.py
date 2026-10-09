@@ -297,6 +297,7 @@ def _install() -> None:
         @functools.wraps(inner)
         def ensure_git(working_dir, *args, **kwargs):
             if customer_dir(working_dir):
+                _pc_workspace_started(str(working_dir))
                 return None
             return inner(working_dir, *args, **kwargs)
 
@@ -486,7 +487,9 @@ def _install_workspace_git() -> None:
         p = str(path)
         return bridged() and (bool(_WIN_PATH.match(p)) or under_roots(p, customer_roots()))
 
-    for name, bridged_fn in (("get_git_changes", wg.changes), ("get_git_diff", wg.diff)):
+    for name, bridged_fn in (("get_git_changes", wg.changes), ("get_git_diff", wg.diff),
+                             ("get_git_commits", wg.commits), ("get_commit_changes", wg.commit_changes),
+                             ("get_commit_file_diff", wg.commit_file_diff)):
         original = getattr(gr, name)
         if getattr(original, "_nova_wrapped", False):
             continue
@@ -497,7 +500,7 @@ def _install_workspace_git() -> None:
                 if not on_pc(path):
                     return original(path, *args, **kwargs)
                 try:
-                    return bridged_fn(str(path))
+                    return bridged_fn(str(path), *args, **kwargs)
                 except wg.GitNotInstalled as exc:
                     raise HTTPException(status_code=400, detail=str(exc)) from exc
                 except wg.BridgeGitError as exc:
@@ -654,8 +657,104 @@ def _install_file_bridge() -> None:
     logger.info("nova_server_patches: workspace file upload/download bridged to the customer PC")
 
 
+# --- Conversation start on the PC + the file viewer panel (2026-10-09, owner report on Windows) ---
+# A conversation without a chosen folder gets "<PC home>/workspace/project/<hex>". EventService.start()
+# then mkdir()s it on THIS host (a Windows path is relative on Linux -> junk dir under the pod's cwd)
+# and git-inits it here, so the Changes tab never saw a repo. Upstream git-inits the workspace; do the
+# same on the PC, only for these app-made folders (never a folder the user picked).
+_DEFAULT_PROJECT_DIR = re.compile(r"[\\/]workspace[\\/]project[\\/][0-9a-f]{32}$")
+
+
+def _pc_workspace_started(working_dir: str) -> None:
+    import os as _os
+    import threading
+    from pathlib import Path as _P
+
+    junk = _P(working_dir)
+    if not junk.is_absolute():  # remove the empty tree start() just made on the server
+        try:
+            _os.removedirs(junk)
+        except OSError:
+            pass
+    if not _DEFAULT_PROJECT_DIR.search(working_dir):
+        return
+    root = next((r for r in customer_roots() if under_roots(working_dir, [r])), None)
+    if root is None:
+        return
+
+    def init() -> None:
+        from . import workspace_git as wg
+        try:
+            if not wg.git_ok(root, "-C", working_dir, "rev-parse", "--git-dir"):
+                wg.git(root, "init", "-q", working_dir)  # creates the folder on the PC as well
+        except Exception as exc:  # git missing / PC offline: the Changes tab explains it
+            logger.info("nova_server_patches: git init on the PC skipped for %s: %s", working_dir, exc)
+
+    threading.Thread(target=init, name="nova-pc-git-init", daemon=True).start()
+
+
+def _install_workspace_files() -> None:
+    """GET /api/conversations/{id}/workspace/{file}: the file panel reads from the PC, not the pod."""
+    import base64
+    import mimetypes
+
+    from fastapi import HTTPException
+    from fastapi.responses import Response
+    from openhands.agent_server import workspace_router as wr
+
+    if getattr(wr._serve_path, "_nova_wrapped", False):
+        return
+    orig_resolve, orig_serve = wr._resolve_workspace_dir, wr._serve_path
+
+    class PCDir(str):
+        """A workspace folder on the customer's PC (string path, never touched locally)."""
+
+    async def resolve(conversation_id, conversation_service):
+        event_service = await conversation_service.get_event_service(conversation_id)
+        wd = str(getattr(getattr(getattr(event_service, "stored", None), "workspace", None), "working_dir", "") or "")
+        if wd and bridged() and (_WIN_PATH.match(wd) or under_roots(wd, customer_roots())):
+            return PCDir(wd.rstrip("\\/"))
+        return await orig_resolve(conversation_id, conversation_service)
+
+    def read(path: str) -> bytes:
+        from sidecar_bridge.client import client_from_env
+        c = client_from_env()
+        if c is None:
+            raise HTTPException(status_code=503, detail="workspace is not connected")
+        if "file_base64" in _client_caps():
+            res = c.request("read_file", {"path": path, "encoding": "base64"})
+            return base64.b64decode(res.get("content") or "")
+        return str(c.read_file(path).get("content") or "").encode("utf-8")
+
+    def serve(workspace_dir, file_path: str):
+        if not isinstance(workspace_dir, PCDir):
+            return orig_serve(workspace_dir, file_path)
+        parts = [p for p in re.split(r"[\\/]+", file_path or "") if p not in ("", ".")]
+        if ".." in parts:
+            raise HTTPException(status_code=400, detail="Path is outside the workspace")
+        sep = "\\" if _WIN_PATH.match(workspace_dir) else "/"
+        target = sep.join([str(workspace_dir), *parts])
+        for candidate in ([target] if parts else []) + [target + sep + "index.html"]:
+            try:
+                body = read(candidate)
+            except HTTPException:
+                raise
+            except Exception:
+                continue
+            mt = mimetypes.guess_type(candidate.replace("\\", "/"))[0] or "application/octet-stream"
+            if mt.startswith("text/") or mt in ("application/json", "application/javascript"):
+                mt += "; charset=utf-8"
+            return Response(content=body, media_type=mt)
+        raise HTTPException(status_code=404, detail="File not found")
+
+    serve._nova_wrapped = True
+    wr._resolve_workspace_dir, wr._serve_path = resolve, serve
+    logger.info("nova_server_patches: conversation workspace files served from the customer PC")
+
+
 _install()
 _install_memory()
 _install_command_gate()
 _install_workspace_git()
 _install_file_bridge()
+_install_workspace_files()

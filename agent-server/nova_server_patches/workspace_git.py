@@ -90,7 +90,7 @@ def _rel(root: str, path: str) -> str:
 
 
 # --- Changes tab -------------------------------------------------------------------------------
-def changes(cwd: str):
+def changes(cwd: str, ref=None, **_):
     from openhands.sdk.git.models import GitChange, GitChangeStatus
 
     out = git(cwd, "status", "--porcelain=v1", "-z", "-uall")
@@ -115,7 +115,7 @@ def changes(cwd: str):
     return items
 
 
-def diff(file_path: str):
+def diff(file_path: str, ref=None, **_):
     from openhands.sdk.git.models import GitDiff
 
     root = repo_root(file_path)
@@ -200,3 +200,58 @@ def init_repo(path: str) -> dict:
     """`git init` in a workspace folder that is not a repository yet (Changes tab button)."""
     git(path, "init", "-q")
     return {"ok": True, "path": path}
+
+
+# --- Commits section of the Changes tab (git_router /commits*, 2026-10-09) ----------------------
+_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+_LOG_FORMAT = "%H%x1f%h%x1f%an%x1f%aI%x1f%s"
+_SHA = re.compile(r"^[0-9a-fA-F]{4,64}$")
+
+
+def _verify(root: str, rev: str) -> str | None:
+    out = git(root, "rev-parse", "--verify", "--quiet", rev, check=False).strip()
+    return out or None
+
+
+def commits(path: str, limit: int = 50):
+    from openhands.sdk.git.models import GitCommit, GitCommitsPage
+
+    root = repo_root(path)
+    head = _verify(root, "HEAD^{commit}")
+    if head is None:  # unborn HEAD
+        return GitCommitsPage(commits=[], has_more=False)
+    out = git(root, "--no-pager", "log", "--no-show-signature", f"--format={_LOG_FORMAT}", "-n", str(limit + 1), head)
+    items = []
+    for line in out.splitlines():
+        f = line.split("\x1f")
+        if len(f) == 5:
+            items.append(GitCommit(sha=f[0], short_sha=f[1], author=f[2], timestamp=f[3], subject=f[4]))
+    return GitCommitsPage(commits=items[:limit], has_more=len(items) > limit)
+
+
+def _commit_and_parent(root: str, sha: str) -> tuple[str, str]:
+    if not _SHA.match(sha):
+        raise BridgeGitError(f"invalid commit: {sha}")
+    full = _verify(root, f"{sha}^{{commit}}")
+    if full is None:
+        raise BridgeGitError(f"unknown commit: {sha}")
+    return full, _verify(root, f"{full}^") or _EMPTY_TREE
+
+
+def commit_changes(path: str, sha: str):
+    from openhands.sdk.git.git_changes import _parse_name_status
+
+    root = repo_root(path)
+    full, parent = _commit_and_parent(root, sha)
+    out = git(root, "--no-pager", "diff", "--name-status", parent, full)
+    return _parse_name_status(out.splitlines())
+
+
+def commit_file_diff(file_path: str, sha: str):
+    from openhands.sdk.git.models import GitDiff
+
+    root = repo_root(file_path)
+    rel = _rel(root, file_path)
+    full, parent = _commit_and_parent(root, sha)
+    show = lambda rev: git(root, "--no-pager", "show", f"{rev}:{rel}", check=False)  # noqa: E731
+    return GitDiff(original=show(parent) if parent != _EMPTY_TREE else "", modified=show(full))

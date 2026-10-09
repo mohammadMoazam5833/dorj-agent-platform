@@ -21,6 +21,9 @@ class FakePC:  # the customer's sidecar, but local; root plays "C:\proj"
             return {"content": raw.decode()}
         raise AssertionError(t)
     def read_file(self, p): return self.request("read_file", {"path": p})
+    def list_dir(self, p):
+        if not os.path.isdir(p): raise RuntimeError("not a dir")
+        return {"entries": os.listdir(p)}
     def exec(self, argv, cwd=None, timeout_ms=None):
         if GIT_MISSING["v"]: raise SidecarClientError("exec_failed", "spawn git ENOENT")
         import subprocess
@@ -56,4 +59,42 @@ try: wg.git(root, "status"); raise SystemExit("expected GitNotInstalled")
 except wg.GitNotInstalled as e: assert str(e).startswith("git_not_installed:")
 from openhands.agent_server import git_router as gr
 assert any(r.path == "/git/init" for r in gr.git_router.routes)
+GIT_MISSING["v"] = False
+# file viewer panel: /api/conversations/{id}/workspace/{file} reads the PC
+from openhands.agent_server import workspace_router as wr
+class Svc:
+    async def get_event_service(self, cid):
+        return types.SimpleNamespace(stored=types.SimpleNamespace(workspace=types.SimpleNamespace(working_dir=root)))
+d = asyncio.run(wr._resolve_workspace_dir("x", Svc()))
+r = wr._serve_path(d, "sub/a.txt"); assert r.body == "سلام\n".encode() and "charset=utf-8" in r.media_type, r.media_type
+try: wr._serve_path(d, "../etc/passwd"); raise SystemExit("traversal must fail")
+except HTTPException as e: assert e.status_code == 400
+try: wr._serve_path(d, "missing.py"); raise SystemExit("expected 404")
+except HTTPException as e: assert e.status_code == 404
+# commits section on the PC
+import subprocess
+def sh(*a): subprocess.run(a, cwd=root, check=True, capture_output=True)
+sh("git", "config", "user.email", "t@t"); sh("git", "config", "user.name", "t")
+from openhands.agent_server import git_router as gr
+assert gr.get_git_commits(root, limit=50).commits == []  # unborn HEAD
+sh("git", "add", "sub/a.txt"); sh("git", "commit", "-qm", "first")
+open(f"{root}/sub/a.txt", "w").write("دو\n"); sh("git", "commit", "-qam", "second")
+page = gr.get_git_commits(root, limit=1); assert [c.subject for c in page.commits] == ["second"] and page.has_more, page
+sha = page.commits[0].sha
+assert [(c.status.value, str(c.path)) for c in gr.get_commit_changes(root, sha)] == [("UPDATED", "sub/a.txt")]
+fd = gr.get_commit_file_diff(f"{root}/sub/a.txt", sha); assert fd.original == "سلام\n" and fd.modified == "دو\n", fd
+first = gr.get_git_commits(root, limit=5).commits[-1].sha
+assert gr.get_commit_file_diff(f"{root}/sub/a.txt", first).original == ""
+_ch = [str(c.path) for c in gr.get_git_changes(root, ref=None)]; assert "sub/a.txt" not in _ch and "i.png" in _ch, _ch
+# conversation start: default app folder is git-inited on the PC, junk relative dir removed
+import threading, time
+proj = f"{root}/workspace/project/" + "ab" * 16
+nsp._pc_workspace_started(proj)
+for _ in range(50):
+    if os.path.isdir(proj + "/.git"): break
+    time.sleep(0.1)
+assert os.path.isdir(proj + "/.git")
+os.makedirs("C:\\U/workspace/project/x", exist_ok=True); nsp._pc_workspace_started("C:\\U/workspace/project/x")
+assert not os.path.exists("C:\\U")
+print("OK: workspace panel (text/traversal/404), commits/commit changes/commit diff, auto git init, junk dir cleanup")
 print("OK: text upload, binary gate, base64 upload/download, non-PC passthrough, git init, git_not_installed")
