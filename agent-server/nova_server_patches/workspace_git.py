@@ -47,8 +47,22 @@ def _pm(path: str):
     return ntpath if _WIN.match(path) else posixpath
 
 
+class GitNotInstalled(BridgeGitError):
+    """git is missing on the customer's PC (spawn ENOENT)."""
+
+
+def _exec_git(cwd: str, args) -> dict:
+    try:
+        return _client().exec(["git", *args], cwd=cwd, timeout_ms=_TIMEOUT_MS)
+    except Exception as exc:
+        text = str(exc)
+        if "ENOENT" in text or getattr(exc, "code", "") == "exec_failed" and "git" in text.lower():
+            raise GitNotInstalled("git_not_installed: Git is not installed on this computer") from exc
+        raise
+
+
 def git(cwd: str, *args: str, check: bool = True) -> str:
-    res = _client().exec(["git", *args], cwd=cwd, timeout_ms=_TIMEOUT_MS)
+    res = _exec_git(cwd, args)
     code = res.get("exit_code", 1) if isinstance(res, dict) else 1
     if check and code != 0:
         raise BridgeGitError((res.get("stderr") or res.get("stdout") or "git failed").strip()[:500])
@@ -56,7 +70,7 @@ def git(cwd: str, *args: str, check: bool = True) -> str:
 
 
 def git_ok(cwd: str, *args: str) -> bool:
-    res = _client().exec(["git", *args], cwd=cwd, timeout_ms=_TIMEOUT_MS)
+    res = _exec_git(cwd, args)
     return isinstance(res, dict) and res.get("exit_code") == 0
 
 
@@ -180,3 +194,9 @@ def restore_checkpoint(path: str, cp_id: str) -> dict:
     for i in range(0, len(removed), 50):
         git(root, "clean", "-f", "-q", "--", *removed[i:i + 50])
     return {"ok": True, "restored": cp_id, "removed": removed, "undo": undo["id"]}
+
+
+def init_repo(path: str) -> dict:
+    """`git init` in a workspace folder that is not a repository yet (Changes tab button)."""
+    git(path, "init", "-q")
+    return {"ok": True, "path": path}

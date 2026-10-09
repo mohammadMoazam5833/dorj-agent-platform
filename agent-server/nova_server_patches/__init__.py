@@ -498,6 +498,8 @@ def _install_workspace_git() -> None:
                     return original(path, *args, **kwargs)
                 try:
                     return bridged_fn(str(path))
+                except wg.GitNotInstalled as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
                 except wg.BridgeGitError as exc:
                     from openhands.sdk.git.exceptions import GitRepositoryError
                     raise GitRepositoryError(str(exc)) from exc
@@ -512,7 +514,7 @@ def _install_workspace_git() -> None:
     async def call(fn, *args):
         try:
             return await asyncio.get_running_loop().run_in_executor(None, fn, *args)
-        except wg.BridgeGitError as exc:
+        except wg.BridgeGitError as exc:  # includes GitNotInstalled (detail starts git_not_installed:)
             raise HTTPException(status_code=400, detail=str(exc))
 
     @gr.git_router.post("/accept")
@@ -537,6 +539,13 @@ def _install_workspace_git() -> None:
     async def git_checkpoint_restore(path: str = Body(...), id: str = Body(...)) -> dict:
         return await call(wg.restore_checkpoint, path, id)
 
+    @gr.git_router.post("/init")
+    async def git_init(path: str = Body(..., embed=True)) -> dict:
+        """Make a workspace folder on the PC a git repository."""
+        if not on_pc(path):
+            raise HTTPException(status_code=400, detail="path is not in the connected workspace")
+        return await call(wg.init_repo, path)
+
     gr.git_router._nova_routes = True
 
     # automatic checkpoint before every user message (best effort, never blocks the message)
@@ -559,7 +568,94 @@ def _install_workspace_git() -> None:
     logger.info("nova_server_patches: bridged git (changes/diff/accept/revert/checkpoints) installed")
 
 
+# --- Workspace file upload/download on the customer's PC (2026-10-09, owner bug report) -----------
+# agent-server's /api/file/upload|download read/write THIS host: a Windows path ("C:\\...") is not
+# absolute on Linux -> 400 "Path must be absolute", and a Linux PC's path silently landed on the pod.
+# While bridged, customer paths go through the sidecar: UTF-8 text with the v1 protocol, binary only
+# when the client announces the "file_base64" capability (T19); otherwise a clear bilingual 400.
+_FILE_MAX = 25 * 1024 * 1024
+
+
+def _client_caps() -> set:
+    caps = customer_hello().get("capabilities")
+    return set(caps) if isinstance(caps, list) else set()
+
+
+def _install_file_bridge() -> None:
+    import base64
+    import mimetypes
+
+    from fastapi import HTTPException
+    from fastapi.responses import Response
+    from openhands.agent_server import file_router as fr
+
+    def on_pc(path) -> bool:
+        p = str(path)
+        return bridged() and (bool(_WIN_PATH.match(p)) or under_roots(p, customer_roots()))
+
+    def cli():
+        from sidecar_bridge.client import client_from_env
+        c = client_from_env()
+        if c is None:
+            raise HTTPException(status_code=503, detail="workspace is not connected")
+        return c
+
+    orig_upload, orig_download = fr._upload_file, fr._download_file
+    if getattr(orig_upload, "_nova_wrapped", False):
+        return
+
+    @functools.wraps(orig_upload)
+    async def upload(path, file):
+        if not on_pc(path):
+            return await orig_upload(path, file)
+        data = await file.read(_FILE_MAX + 1)
+        if len(data) > _FILE_MAX:
+            raise HTTPException(status_code=413, detail="file larger than 25 MB / فایل بزرگ‌تر از ۲۵ مگابایت است")
+        try:
+            text = data.decode("utf-8")
+            params = {"path": path, "content": text, "create_parents": True}
+        except UnicodeDecodeError:
+            if "file_base64" not in _client_caps():
+                raise HTTPException(status_code=400, detail=(
+                    "Uploading binary files needs the latest Dorj Agent app / "
+                    "برای بارگذاری این نوع فایل نسخه‌ی جدید دستیار دُرج را نصب کنید"))
+            params = {"path": path, "content": base64.b64encode(data).decode("ascii"),
+                      "encoding": "base64", "create_parents": True}
+        try:
+            cli().request("write_file", params)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"upload failed on your computer: {exc}") from exc
+        from openhands.agent_server.models import Success
+        return Success()
+
+    @functools.wraps(orig_download)
+    async def download(path):
+        if not on_pc(path):
+            return await orig_download(path)
+        try:
+            if "file_base64" in _client_caps():
+                res = cli().request("read_file", {"path": path, "encoding": "base64"})
+                body = base64.b64decode(res.get("content") or "")
+            else:
+                res = cli().read_file(path)
+                body = str(res.get("content") or "").encode("utf-8")
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail=f"file not readable on your computer: {exc}") from exc
+        name = re.split(r"[\\/]", str(path))[-1] or "file"
+        mt = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        return Response(content=body, media_type=mt, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+    upload._nova_wrapped = True
+    fr._upload_file, fr._download_file = upload, download
+    logger.info("nova_server_patches: workspace file upload/download bridged to the customer PC")
+
+
 _install()
 _install_memory()
 _install_command_gate()
 _install_workspace_git()
+_install_file_bridge()
