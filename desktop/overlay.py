@@ -77,18 +77,26 @@ async function trustOrgCa(remoteUiUrl) {
   for (const extra of String(process.env.NOVAAGENT_TRUSTED_HOSTS || "").split(",")) {
     if (extra.trim()) ORG_TRUSTED_HOSTS.add(extra.trim());
   }
-  session.defaultSession.setCertificateVerifyProc((req, cb) => {
-    if (req.errorCode === 0) return cb(0);
-    if (!ORG_TRUSTED_HOSTS.has(req.hostname)) return cb(-2);
+  const issuedByOrg = (req) => {
     try {
       const leaf = new X509Certificate(req.certificate.data);
       const now = Date.now();
-      const ok = leaf.checkIssued(ca) && leaf.verify(ca.publicKey) && Boolean(leaf.checkHost(req.hostname)) &&
+      return leaf.checkIssued(ca) && leaf.verify(ca.publicKey) && Boolean(leaf.checkHost(req.hostname)) &&
         Date.parse(leaf.validFrom) <= now && now <= Date.parse(leaf.validTo);
-      cb(ok ? 0 : -2);
     } catch {
-      cb(-2);
+      return false;
     }
+  };
+  session.defaultSession.setCertificateVerifyProc((req, cb) => {
+    if (req.errorCode === 0) return cb(0);
+    if (!ORG_TRUSTED_HOSTS.has(req.hostname)) return cb(-2);
+    cb(issuedByOrg(req) ? 0 : -2);
+  });
+  // The side panel's browser (<webview partition="persist:novapreview">, canvas open_url): intranet
+  // sites signed by the org CA open like in the company browser; public sites keep Chromium's check.
+  session.fromPartition("persist:novapreview").setCertificateVerifyProc((req, cb) => {
+    if (req.errorCode === 0) return cb(0);
+    cb(issuedByOrg(req) ? 0 : -2);
   });
 }
 

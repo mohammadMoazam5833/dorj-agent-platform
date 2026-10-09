@@ -106,6 +106,28 @@ test('desktop client: sign in, server UI, agent works on this PC', async () => {
     expect(readFileSync(path.join(dir, 'note.txt'), 'utf8')).toBe('سلام دُرج\n')
     expect(readFileSync(path.join(dir, 'img.bin')).length).toBe(3 * 1024 * 1024)
     expect(existsSync(path.join(dir, '.git')), 'git init ran on this machine').toBe(true)
+
+    // 5. the side panel like Cursor (owner 2026-10-09): asked in the chat UI to open a site, the agent
+    //    shows it in the panel's Browser tab (canvas_ui_control open_url -> local <webview>)
+    await main.goto(new URL('/', main.url()).toString())
+    const box = main.locator('[contenteditable="true"]').first()
+    await expect(box).toBeVisible({ timeout: 120_000 })
+    await box.click()
+    await box.fill('Open https://nova.isigpu.local/download/ in the browser panel so I can see it. Do not run any command.')
+    await main.keyboard.press('Enter')
+    const view = main.locator('webview[src*="nova.isigpu.local/download"]')
+    await expect(view).toBeAttached({ timeout: 240_000 })
+    const wv = await main.evaluate(() => new Promise((resolve) => {
+      const v = document.querySelector('webview')
+      const done = (r) => resolve(r)
+      v.addEventListener('did-fail-load', (e) => done({ fail: e.errorCode + ' ' + e.errorDescription + ' ' + e.validatedURL }))
+      v.addEventListener('did-finish-load', () => done({ ok: v.getURL(), title: v.getTitle() }))
+      setTimeout(() => { try { done({ timeout: true, url: v.getURL(), loading: v.isLoading() }) } catch (e) { done({ err: String(e) }) } }, 20000)
+    }))
+    console.log('[WEBVIEW]', JSON.stringify(wv)); writeFileSync(path.join(SHOTS, 'webview.json'), JSON.stringify(wv))
+    expect(wv.ok, `panel browser loaded the page: ${JSON.stringify(wv)}`).toContain('nova.isigpu.local/download')
+    await main.waitForTimeout(3000)
+    await main.screenshot({ path: path.join(SHOTS, 'nova-desktop-panel-browser.png') })
   } finally {
     if (main) {   // what the customer saw last (also on failure)
       await main.screenshot({ path: path.join(SHOTS, 'nova-desktop-last.png') }).catch(() => {})
