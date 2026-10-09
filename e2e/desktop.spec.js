@@ -4,7 +4,7 @@
 // machine's disk. Runs inside an Ubuntu container under Xvfb (see e2e/run-desktop.sh).
 // Needs: E2E_USER/E2E_PASS, NOVA_DESKTOP_BIN (default /usr/bin/dorj-agent-client).
 import { test, expect, _electron as electron } from '@playwright/test'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
@@ -78,6 +78,34 @@ test('desktop client: sign in, server UI, agent works on this PC', async () => {
     expect(result.status, JSON.stringify(result)).toBe('finished')
     expect(existsSync(PROOF), `${PROOF} must exist on the customer machine`).toBe(true)
     expect(readFileSync(PROOF, 'utf8').trim()).toBe('pong')
+
+    // 4. T19: workspace upload/download and `git init` reach THIS machine (Windows bug 2026-10-09:
+    //    upload ran on the server -> "Path must be absolute"); 3 MB binary needs file_base64
+    const dir = path.join(homedir(), 'nova_t19')
+    rmSync(dir, { recursive: true, force: true })
+    const t19 = await main.evaluate(async ({ dir }) => {
+      const h = { 'X-Session-API-Key': window.__AGENT_CANVAS_SESSION_API_KEY__ }
+      const bin = new Uint8Array(3 * 1024 * 1024).map((_, i) => (i * 31 + 7) & 255)
+      const up = async (name, blob) => {
+        const fd = new FormData(); fd.append('file', blob, name)
+        const r = await fetch(`/api/file/upload?path=${encodeURIComponent(dir + '/' + name)}`, { method: 'POST', headers: h, body: fd })
+        return r.status + ' ' + (await r.text()).slice(0, 200)
+      }
+      const text = await up('note.txt', new Blob(['سلام دُرج\n']))
+      const binary = await up('img.bin', new Blob([bin]))
+      const dl = new Uint8Array(await (await fetch(`/api/file/download?path=${encodeURIComponent(dir + '/img.bin')}`, { headers: h })).arrayBuffer())
+      const same = dl.length === bin.length && dl.every((b, i) => b === bin[i])
+      const init = await fetch('/api/git/init', { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ path: dir }) })
+      return { text, binary, same, init: init.status + ' ' + (await init.text()).slice(0, 200) }
+    }, { dir })
+    console.log('[T19]', JSON.stringify(t19)); writeFileSync(path.join(SHOTS, 't19.json'), JSON.stringify(t19))
+    expect(t19.text).toMatch(/^200/)
+    expect(t19.binary).toMatch(/^200/)
+    expect(t19.same, 'downloaded bytes equal uploaded bytes').toBe(true)
+    expect(t19.init).toMatch(/^200/)
+    expect(readFileSync(path.join(dir, 'note.txt'), 'utf8')).toBe('سلام دُرج\n')
+    expect(readFileSync(path.join(dir, 'img.bin')).length).toBe(3 * 1024 * 1024)
+    expect(existsSync(path.join(dir, '.git')), 'git init ran on this machine').toBe(true)
   } finally {
     if (main) {   // what the customer saw last (also on failure)
       await main.screenshot({ path: path.join(SHOTS, 'nova-desktop-last.png') }).catch(() => {})
