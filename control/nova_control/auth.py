@@ -60,10 +60,21 @@ async def password_login(username: str, password: str) -> dict:
 def token_from(request) -> str:
     h = request.headers
     auth = h.get("authorization", "")
+    cookie = request.cookies.get(COOKIE)
     for cand in (h.get("x-session-api-key"), auth[7:] if auth.lower().startswith("bearer ") else None,
                  request.query_params.get("session_api_key"), request.query_params.get("t"),
-                 request.cookies.get(COOKIE)):
+                 cookie):
         if cand and tenants.by_token(cand):
+            # Account switch on one PC (2026-10-11): the UI's backend registry in localStorage can still hold the
+            # previous account's key and send it as X-Session-API-Key / session_api_key, while the page cookie
+            # (set from ?t= on this load) is the account actually signed in - B then saw A's conversations.
+            # A request key of another tenant than the page cookie is rejected. ?t= is the fresh sign-in itself
+            # (it replaces the cookie), and the CLI sends only Bearer, so neither is affected.
+            if (cookie and cand != cookie and cand != request.query_params.get("t")
+                    and (owner := tenants.by_token(cookie)) and owner["name"] != tenants.by_token(cand)["name"]):
+                log.warning("request key of another account than the page session rejected",
+                            extra={"event": "tenant_mismatch", "user": owner.get("email")})
+                return ""
             return cand
     return ""
 

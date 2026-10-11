@@ -387,8 +387,17 @@ def _boot(token: str, llm_key: str, email: str) -> str:
     session = j({"access_token": llm_key, "username": email})
     return ("<script>window.__AGENT_CANVAS_SESSION_API_KEY__=" + j(token) + ";window.__AGENT_CANVAS_AUTH_REQUIRED__=false;"
             "window.__NOVAAGENT_COMPANY_LLM_URL__=location.protocol+'//'+location.host+'/llmapi';"
-            "try{localStorage.setItem('openhands-onboarded','1');"
-            "localStorage.setItem('novaagent-company-llm-session'," + j(session) + ");}catch(e){}</script>")
+            "try{var L=localStorage,me=" + j(email) + ";"
+            # account switch on this PC: drop the previous account's per-user client state (backend keys,
+            # last conversation, conversation metadata/state) before the UI reads it
+            "if(L.getItem('dorj-tenant')!==me){for(var i=L.length-1;i>=0;i--){var k=L.key(i);"
+            "if(/^(openhands-(backends|active-backend|agent-server-conversation-metadata|last-conversation|conversation)|conversation-state|pending-task-draft)/.test(k))L.removeItem(k);}"
+            "L.setItem('dorj-tenant',me);}"
+            # the only backend is this account's workspace, always with this page's key
+            "L.setItem('openhands-backends',JSON.stringify([{id:'default-local',name:'Local',host:location.origin,apiKey:" + j(token) + ",kind:'local'}]));"
+            "L.setItem('openhands-active-backend',JSON.stringify({backendId:'default-local'}));"
+            "L.setItem('openhands-onboarded','1');"
+            "L.setItem('novaagent-company-llm-session'," + j(session) + ");}catch(e){}</script>")
 
 
 @app.get("/{path:path}", include_in_schema=False)
