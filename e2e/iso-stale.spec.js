@@ -1,3 +1,4 @@
+// Needs two synthetic tenants: see the header of iso.spec.js (created/removed with nova_control.tenants like load30.sh).
 // Account switch on one PC with a backend entry left in localStorage by the previous account (older client
 // versions / an edited backend): B must still only see B's conversations.
 import { test, expect } from '@playwright/test'
@@ -22,7 +23,9 @@ test('stale backend registry from another account does not leak', async ({ page 
     b[0].host = b[0].host.replace(/\/?$/, '/'); localStorage.setItem('openhands-backends', JSON.stringify(b))
   })
   const seen = []
-  page.on('request', r => { if (r.url().includes('/api/conversations')) seen.push(r.headers()['x-session-api-key'] === A ? 'A' : r.headers()['x-session-api-key'] === B ? 'B' : 'other') })
+  // only requests issued by B's page (in-flight polling of A's page during the navigation is A's own, legit)
+  page.on('response', r => { const q = r.request(); if (q.url().includes('/api/conversations') && r.status() === 200 && q.frame().url().includes(B)) seen.push(q.headers()['x-session-api-key'] === A ? 'A' : q.headers()['x-session-api-key'] === B ? 'B' : 'other') })
+  if (0) page.on('request', r => { if (r.url().includes('/api/conversations')) seen.push(r.headers()['x-session-api-key'] === A ? 'A' : r.headers()['x-session-api-key'] === B ? 'B' : 'other') })
   await page.goto(N + '/?t=' + B); await page.waitForTimeout(10000)
   const leaked = await page.evaluate((id) => document.body.innerHTML.includes(id), conv.id)
   console.log('requests as:', [...new Set(seen)].join(','), 'B UI shows A conversation:', leaked)
