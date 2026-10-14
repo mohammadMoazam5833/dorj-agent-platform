@@ -161,7 +161,7 @@ def _deployment(ident: Identity) -> client.V1Deployment:
         client.V1EnvVar(name="NOVAAGENT_LOCAL_TOOLS_URL", value=f"{settings.gateway_url}/c/{ident.slug}"),
         from_secret("NOVAAGENT_CUSTOMER_WORKSPACE_TOKEN", "tenant-token"),
         client.V1EnvVar(name="NOVAAGENT_TENANT", value=ident.slug),
-        # the app's company-managed LLM profile names the public /llmapi; in-cluster it goes straight to LiteLLM
+        # the app's company-managed LLM profile names the public /llmapi; in-cluster it goes to /llmapi on our Service
         client.V1EnvVar(name="NOVA_LLM_PUBLIC_BASE", value=f"{settings.public_url}/llmapi"),
         client.V1EnvVar(name="NOVA_LLM_INTERNAL_BASE", value=settings.llm_agent_base),
         client.V1EnvVar(name="NOVA_REASONING_EFFORT_MAP", value=settings.reasoning_effort_map),
@@ -264,7 +264,10 @@ def _drifted(ident: Identity) -> bool:
     dep = apps.read_namespaced_deployment(name_for(ident.slug), settings.workspace_namespace)
     tpl = dep.spec.template
     want_sha = hashlib.sha256(_tenant_token(ident).encode()).hexdigest()[:16]
+    # plain env values too: a nova-control upgrade can change them (e.g. NOVA_LLM_INTERNAL_BASE, T26)
+    env = lambda c: {(e.name, e.value) for e in (c.env or []) if e.value is not None}
     return (tpl.spec.containers[0].image != settings.agent_server_image
+            or env(tpl.spec.containers[0]) != env(_deployment(ident).spec.template.spec.containers[0])
             or (tpl.metadata.annotations or {}).get("nova.isigpu.local/tenant-token-sha") != want_sha)
 
 

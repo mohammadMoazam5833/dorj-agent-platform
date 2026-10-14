@@ -202,9 +202,6 @@ const PAGE = `<!doctype html>
 <link rel="icon" href="__FAVICON__">
 <title>NovaAgent | پنل مدیریت</title>
 <style>
-@font-face{font-family:Vazirmatn;src:url(/fonts/vazirmatn-400.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap}
-@font-face{font-family:Vazirmatn;src:url(/fonts/vazirmatn-600.woff2) format("woff2");font-weight:600;font-style:normal;font-display:swap}
-@font-face{font-family:Vazirmatn;src:url(/fonts/vazirmatn-700.woff2) format("woff2");font-weight:700;font-style:normal;font-display:swap}
 :root{--bg:#0d0d0f;--card:#161619;--card2:#1d1d21;--line:#2a2a30;--tx:#ececf1;--tx2:#9a9aa5;--acc:#d97757;--acc2:#8b7cf6;--ok:#3fb950;--bad:#f85149;--warn:#d29922}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--tx);font-family:Vazirmatn,"Segoe UI",Tahoma,sans-serif;min-height:100vh}
