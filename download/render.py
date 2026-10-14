@@ -80,19 +80,21 @@ if wheels:
     pip_index = "http://172.16.50.89:8083/repository/pypi-proxy/simple"
     pip_host = "172.16.50.89"
     faq_cli = (f'<details>\n      <summary>خط فرمان (CLI) هم دارد؟</summary>\n      <div class="a">بله — <code class="ltr">dorj-agent</code> و <code class="ltr">nova</code> برای ترمینال و CI. '
-               f'نصب: <code class="ltr">pip install --index-url {pip_index} --trusted-host {pip_host} {server}/download/{wheels[-1].name}</code> سپس <code class="ltr">dorj-agent login</code>. '
-               f'گواهی ریشه‌ی سازمان: <a class="ltr" href="isigpu-root-ca.crt">isigpu-root-ca.crt</a>.</div>\n    </details>\n    ')
+               f'اول گواهی ریشه‌ی سازمان <a class="ltr" href="isigpu-root-ca.crt">isigpu-root-ca.crt</a> را بگیرید و بعد نصب کنید: <code class="ltr">pip install --cert isigpu-root-ca.crt --index-url {pip_index} --trusted-host {pip_host} {server}/download/{wheels[-1].name}</code> سپس <code class="ltr">dorj-agent login</code>. '
+               f'</div>\n    </details>\n    ')
     sub(r"<details>\s*<summary>[^<]*به اشتراک AI", faq_cli + "<details>\n      <summary>به اشتراک AI", required=False, count=1)
 # CLI section (download-site #cli): fill the real install command, or drop it when no wheel exists
 if wheels:
-    pip_cmd = (f"pip install --index-url http://172.16.50.89:8083/repository/pypi-proxy/simple "
+    # pip checks the wheel's https URL against certifi, which lacks the org root: the page fetches the root first
+    pip_cmd = (f"pip install --cert isigpu-root-ca.crt --index-url http://172.16.50.89:8083/repository/pypi-proxy/simple "
                f"--trusted-host 172.16.50.89 {server}/download/{wheels[-1].name}")
     sub(r"__CLI_PIP__", pip_cmd)
     sub(r"__SERVER__", server)
+    sub(r"__CA_SHA256__", hashlib.sha256((out / "isigpu-root-ca.crt").read_bytes()).hexdigest())
 else:
     sub(r'(?s)<section id="cli">.*?</section>\s*', "", count=1)
     sub(r'<a href="#cli">[^<]*</a>', "", required=False)
-for token in ("__CLI_PIP__", "__SERVER__"):
+for token in ("__CLI_PIP__", "__SERVER__", "__CA_SHA256__"):
     if token in html:
         sys.exit(f"download page: placeholder left: {token}")
 assert "172.16.40.188" not in html

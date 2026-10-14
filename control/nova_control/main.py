@@ -179,7 +179,20 @@ async def me_usage(ident: Identity = Depends(current_identity)):
 async def me(ident: Identity = Depends(current_identity)):
     ws = await asyncio.to_thread(workspaces.get, ident)
     return {"email": ident.email, "user": ident.slug, "groups": list(ident.groups),
-            "plan": "pro", "workspace": ws.as_dict(), "default_model": settings.default_model}
+            **(await _plan_fields(ident)), "workspace": ws.as_dict(), "default_model": settings.default_model}
+
+
+async def _plan_fields(ident: Identity) -> dict:
+    """The Dorj Agent plan and Toman credit for the CLI (whoami/usage); a billing outage shows as unknown."""
+    try:
+        w = await billing.wallet(_http, ident)
+    except HTTPException:
+        return {"plan": "unknown", "credit_toman": None, "plan_expires": None}
+    title = w.get("plan_title")
+    if isinstance(title, list) and len(title) == 2:
+        title = f"{title[0]} / {title[1]}"
+    return {"plan": w.get("plan"), "plan_title": title, "credit_toman": w.get("credit_toman"),
+            "plan_expires": w.get("plan_expires")}
 
 
 @app.get("/v1/workspace")
@@ -228,7 +241,13 @@ async def models(ident: Identity = Depends(current_identity)):
 
 @app.get("/v1/usage")
 async def usage(ident: Identity = Depends(current_identity)):
-    return {"user": ident.email, "llm": await llmkeys.user_spend(ident.slug)}
+    """Agent usage in Toman from the billing ledger (what the plan is charged), not LiteLLM's internal USD spend."""
+    try:
+        summary = billing.usage_summary(await billing.history(_http, ident))
+    except HTTPException:
+        summary = {}
+    return {"user": ident.email, **(await _plan_fields(ident)),
+            **{k: summary[k] for k in ("tokens_in", "tokens_out", "cost_toman", "models") if k in summary}}
 
 
 # ── desktop sign-in (NovaAgent electron/login-prompt.html -> main.mjs loginToWorkspaceServer) ─────

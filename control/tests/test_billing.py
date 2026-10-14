@@ -201,3 +201,26 @@ def test_me_tells_the_app_whether_completions_are_refused(monkeypatch):
     assert asyncio.run(run("b" * 48))["billing_enforced"] is False         # admins are never refused
     monkeypatch.setattr(main, "settings", dataclasses.replace(config.settings, agent_billing_enforce=False))
     assert asyncio.run(run("a" * 48))["billing_enforced"] is False
+
+
+def test_cli_whoami_and_usage_show_the_agent_plan_in_toman(monkeypatch):
+    """`dorj-agent whoami` used to print a fixed plan "pro" and `usage` LiteLLM's USD; both now come from billing."""
+    import asyncio
+
+    async def fake_wallet(http, received):
+        return {"plan": "a1200", "plan_title": ["سازمانی", "Business"], "credit_toman": 1199000.0,
+                "plan_expires": "2026-11-13T00:00:00+00:00", "models": []}
+
+    async def fake_history(http, received):
+        return {"usage": [{"model": "glm", "tokens_in": 100, "tokens_out": 10, "cost_toman": 1.3, "created": "2026-10-15"}]}
+
+    async def run():
+        monkeypatch.setattr(billing, "wallet", fake_wallet)
+        monkeypatch.setattr(billing, "history", fake_history)
+        monkeypatch.setattr(workspaces, "get", lambda i: SimpleNamespace(as_dict=lambda: {}))
+        async with await client() as c:
+            return (await c.get("/v1/me")).json(), (await c.get("/v1/usage")).json()
+
+    me, usage = asyncio.run(run())
+    assert me["plan"] == "a1200" and me["plan_title"] == "سازمانی / Business" and me["credit_toman"] == 1199000.0
+    assert usage["cost_toman"] == 1.3 and usage["models"]["glm"]["tokens_out"] == 10 and "llm" not in usage
