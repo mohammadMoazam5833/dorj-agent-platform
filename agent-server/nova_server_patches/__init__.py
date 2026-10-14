@@ -228,6 +228,23 @@ def _install_vision_support() -> None:
 
     vision_is_active._nova_wrapped = True
     llm_mod.LLM.vision_is_active = vision_is_active
+
+    # The SDK's model features force the string serializer for "glm", which drops image parts.
+    # Keep the list form for messages that carry an image; /llmapi turns the image into text and
+    # flattens that message back to a string for glm.
+    from openhands.sdk.llm import message as msg_mod
+
+    to_chat = msg_mod.Message.to_chat_dict
+    if not getattr(to_chat, "_nova_wrapped", False):
+        @functools.wraps(to_chat)
+        def to_chat_dict(self, *args, **kwargs):
+            if (kwargs.get("force_string_serializer") and kwargs.get("vision_enabled")
+                    and any(isinstance(c, msg_mod.ImageContent) for c in (self.content or []))):
+                kwargs["force_string_serializer"] = False
+            return to_chat(self, *args, **kwargs)
+
+        to_chat_dict._nova_wrapped = True
+        msg_mod.Message.to_chat_dict = to_chat_dict
     logger.info(
         "nova_server_patches: local vision models recognized: %s",
         ", ".join(sorted(vision_models)),

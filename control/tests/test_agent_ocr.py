@@ -102,13 +102,12 @@ def test_glm_receives_only_qwen3_ocr_text_and_no_image_part():
     _, modified = asyncio.run(ocr.prepare_chat_completion(received, client))
 
     assert modified is True
-    parts = received["messages"][1]["content"]
-    assert len(parts) == 2
-    assert parts[0] == {"type": "text", "text": "read the image"}
-    assert parts[1]["type"] == "text"
-    assert "OCR TEXT" in parts[1]["text"]
-    assert "[تصویر: 1, فقط متن OCR در دسترس است]" in parts[1]["text"]
-    assert all(part.get("type") != "image_url" for part in parts if isinstance(part, dict))
+    # glm's message is flattened back to plain string content (the SDK sends glm strings)
+    content = received["messages"][1]["content"]
+    assert isinstance(content, str)
+    assert content.startswith("read the image\n\n")
+    assert "OCR TEXT" in content
+    assert "[تصویر: 1, فقط متن OCR در دسترس است]" in content
     assert len(client.posts) == 1
     assert client.posts[0]["json"]["model"] == "qwen3"
     assert client.posts[0]["json"]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/jpeg")
@@ -127,12 +126,9 @@ def test_multiple_images_keep_their_positions_and_labels():
         ]}],
     }
     _, modified = asyncio.run(ocr.prepare_chat_completion(received, client))
-    parts = received["messages"][0]["content"]
-    assert modified and len(parts) == 3
-    assert all(part["type"] == "text" for part in parts)
-    assert "[تصویر: 1," in parts[0]["text"]
-    assert parts[1] == {"type": "text", "text": "middle"}
-    assert "[تصویر: 2," in parts[2]["text"]
+    content = received["messages"][0]["content"]
+    assert modified and isinstance(content, str)
+    assert content.index("[تصویر: 1,") < content.index("\n\nmiddle\n\n") < content.index("[تصویر: 2,")
 
 
 def test_identical_image_bytes_hit_the_cache():
@@ -142,7 +138,7 @@ def test_identical_image_bytes_hit_the_cache():
 
     assert first[1] and second[1]
     assert len(client.posts) == 1
-    assert "OCR TEXT" in first[0]["messages"][1]["content"][1]["text"]
+    assert "OCR TEXT" in first[0]["messages"][1]["content"]
 
 
 def test_ocr_failure_never_removes_a_qwen_image_but_falls_back_for_glm():
@@ -151,9 +147,7 @@ def test_ocr_failure_never_removes_a_qwen_image_but_falls_back_for_glm():
     qwen = asyncio.run(ocr.prepare_chat_completion(body("qwen3"), client))
 
     assert glm[1] is True
-    glm_parts = glm[0]["messages"][1]["content"]
-    assert len(glm_parts) == 2
-    assert glm_parts[1]["type"] == "text" and glm_parts[1]["text"] == ocr.IMAGE_UNAVAILABLE
+    assert glm[0]["messages"][1]["content"] == "read the image\n\n" + ocr.IMAGE_UNAVAILABLE
 
     assert qwen[1] is True
     qwen_parts = qwen[0]["messages"][1]["content"]
@@ -213,8 +207,7 @@ def test_streaming_is_passed_through_after_ocr_without_buffering(monkeypatch):
     sent = fake.sent[0]
     assert sent["url"] == "http://litellm-internal.vllm.svc.cluster.local:4000/v1/chat/completions"
     sent_body = json.loads(sent["content"])
-    assert sent_body["messages"][1]["content"][1]["type"] == "text"
-    assert "OCR TEXT" in sent_body["messages"][1]["content"][1]["text"]
+    assert "OCR TEXT" in sent_body["messages"][1]["content"]
 
 
 def test_non_image_request_body_is_byte_identical(monkeypatch):

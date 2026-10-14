@@ -306,6 +306,12 @@ async def prepare_chat_completion(body: dict, client: httpx.AsyncClient) -> tupl
         misses += int(ocr_result.ok and not ocr_result.cache_hit)
         failures += int(not ocr_result.ok)
     if not vision:
+        # text-only models: a message left with only text parts goes back to plain string content
+        for message_pos in {pos[0] for pos in positions}:
+            message = messages[message_pos]
+            parts = message.get("content") if isinstance(message, dict) else None
+            if isinstance(parts, list) and all(isinstance(p, dict) and p.get("type") == "text" for p in parts):
+                message["content"] = "\n\n".join(str(p.get("text") or "") for p in parts)
         log.info("agent OCR images=%d cache_hits=%d misses=%d failures=%d vision=%s",
                  len(results), hits, misses, failures, vision)
     return body, modified
