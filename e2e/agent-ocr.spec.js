@@ -50,7 +50,7 @@ async function askAgent(page, model, dataUrl, prompt) {
     const h = { 'Content-Type': 'application/json', 'X-Session-API-Key': key }
     const j = async (r) => { const t = await r.text(); try { return JSON.parse(t) } catch { return { raw: t, status: r.status } } }
     const st = await j(await fetch('/api/settings', { headers: { ...h, 'X-Expose-Secrets': 'encrypted' } }))
-    const agent_settings = { ...st.agent_settings, llm: { ...st.agent_settings.llm, model: `openai/${model}` } }
+    const agent_settings = { ...st.agent_settings, llm: { ...st.agent_settings.llm, model: `litellm_proxy/${model}` } }
     const conv = await j(await fetch('/api/conversations', { method: 'POST', headers: h, body: JSON.stringify({
       workspace: { kind: 'LocalWorkspace', working_dir: '/tmp' }, agent_settings, secrets_encrypted: true }) }))
     if (!conv.id) return { error: 'start-failed ' + JSON.stringify(conv).slice(0, 300) }

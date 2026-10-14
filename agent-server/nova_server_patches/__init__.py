@@ -22,8 +22,9 @@ scripts/patches/conversation_{router,service}-custhome.patch did by editing site
    *on the server*; for a bridged customer path that check is answered as "yes" (the terminal's
    commands run on the customer's PC through sidecar_bridge).
 4. The Dorj Agent UI's company-managed LLM profile points at the public ``https://<host>/llmapi``
-   (what the customer's app can reach). Inside the cluster the same calls go straight to the
-   internal LiteLLM (NOVA_LLM_PUBLIC_BASE -> NOVA_LLM_INTERNAL_BASE), same per-user key.
+   (what the customer's app can reach). Inside the cluster the same calls go to nova-control's
+   /llmapi Service (NOVA_LLM_PUBLIC_BASE or NOVA_LLM_DIRECT_BASE -> NOVA_LLM_INTERNAL_BASE), same
+   per-user key, so the T26 image handling sees every call.
 7. Identity: the agent is Dorj Agent, not "OpenHands agent". Dorj Agent's own identity file
    (scripts/deploy/SOUL.md, baked at /opt/nova/SOUL.md - ~/.openhands is the user's PVC) is the
    SOUL, and the self-documentation block (which pointed at OpenHands docs/products) describes
@@ -159,8 +160,11 @@ def internal_llm_base(base: str | None) -> str | None:
 
     pub = (os.environ.get("NOVA_LLM_PUBLIC_BASE") or "").rstrip("/")
     internal = (os.environ.get("NOVA_LLM_INTERNAL_BASE") or "").rstrip("/")
-    if base and pub and internal and (base.rstrip("/") == pub or base.startswith(pub + "/")):
-        return internal + base[len(pub):]   # LiteLLM serves both /v1/... and /...
+    # workspaces seeded before T26 store LiteLLM's own URL; send those through nova-control too
+    direct = (os.environ.get("NOVA_LLM_DIRECT_BASE") or "").rstrip("/")
+    for src in (pub, direct):
+        if base and src and internal and src != internal and (base.rstrip("/") == src or base.startswith(src + "/")):
+            return internal + base[len(src):]   # /llmapi and LiteLLM both serve /v1/... and /...
     return base
 
 
