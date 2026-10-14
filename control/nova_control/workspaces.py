@@ -165,6 +165,7 @@ def _deployment(ident: Identity) -> client.V1Deployment:
         client.V1EnvVar(name="NOVA_LLM_PUBLIC_BASE", value=f"{settings.public_url}/llmapi"),
         client.V1EnvVar(name="NOVA_LLM_INTERNAL_BASE", value=settings.litellm_url),
         client.V1EnvVar(name="NOVA_REASONING_EFFORT_MAP", value=settings.reasoning_effort_map),
+        client.V1EnvVar(name="NOVA_VISION_MODELS", value=settings.vision_models),
     ]
     probe = client.V1Probe(http_get=client.V1HTTPGetAction(path="/alive", port=settings.agent_server_port),
                            period_seconds=5, failure_threshold=60)

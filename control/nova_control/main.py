@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from prometheus_client import start_http_server
 from starlette.background import BackgroundTask
 
-from . import __version__, admin, auth, llmkeys, tenants, workspaces
+from . import __version__, admin, auth, llmkeys, ocr, tenants, workspaces
 from .config import settings
 from .auth import current_identity
 from .identity import Identity
@@ -227,11 +227,23 @@ LLMAPI_PATHS = {"v1/models", "models", "v1/chat/completions", "chat/completions"
 
 @app.api_route("/llmapi/{path:path}", methods=["GET", "POST"])
 async def llmapi(path: str, request: Request):
-    if path.strip("/") not in LLMAPI_PATHS:
+    path = path.strip("/")
+    if path not in LLMAPI_PATHS:
         raise HTTPException(404)
     headers = {k: v for k, v in request.headers.items() if k.lower() in ("authorization", "content-type", "accept")}
-    upstream = await _http.send(_http.build_request(request.method, f"{settings.litellm_url}/{path.strip('/')}",
-                                                    headers=headers, content=request.stream(),
+    content = request.stream()
+    if request.method == "POST" and path in ("v1/chat/completions", "chat/completions"):
+        raw = await request.body()
+        try:
+            body = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            body = None
+        if isinstance(body, dict):
+            body, modified = await ocr.prepare_chat_completion(body, _http)
+            # Non-image requests keep the caller's exact JSON bytes; only image-bearing bodies are re-encoded.
+            content = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode() if modified else raw
+    upstream = await _http.send(_http.build_request(request.method, f"{settings.litellm_url}/{path}",
+                                                    headers=headers, content=content,
                                                     params=request.query_params), stream=True)
     resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in HOP_BY_HOP}
     return StreamingResponse(upstream.aiter_raw(), status_code=upstream.status_code, headers=resp_headers,

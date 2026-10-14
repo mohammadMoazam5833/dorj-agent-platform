@@ -194,6 +194,42 @@ def _install_identity() -> None:
     prompt_static.SelfDocumentationSection.body = NOVA_SELF_DOC
 
 
+def _install_vision_support() -> None:
+    """Tell OpenHands that nova-control makes both served models image-capable.
+
+    The /llmapi proxy upscales images for qwen3 and uses qwen3 to extract text for
+    glm, which receives that text instead of image bytes (T26).  This list
+    contains the served model names, not raw backend capability.
+    """
+    import os as _os
+
+    from openhands.sdk.llm import llm as llm_mod
+
+    vision_models = {
+        item.strip().lower()
+        for item in (_os.environ.get("NOVA_VISION_MODELS") or
+                     "qwen3,glm").split(",")
+        if item.strip()
+    }
+    original = llm_mod.LLM.vision_is_active
+    if getattr(original, "_nova_wrapped", False):
+        return
+
+    @functools.wraps(original)
+    def vision_is_active(self):
+        if self.disable_vision:
+            return False
+        served = str(self.model).rsplit("/", 1)[-1].strip().lower()
+        return served in vision_models or original(self)
+
+    vision_is_active._nova_wrapped = True
+    llm_mod.LLM.vision_is_active = vision_is_active
+    logger.info(
+        "nova_server_patches: local vision models recognized: %s",
+        ", ".join(sorted(vision_models)),
+    )
+
+
 def _install() -> None:
     from openhands.agent_server import conversation_service as cs
 
@@ -798,6 +834,7 @@ def _install_bash_bridge() -> None:
     logger.info("nova_server_patches: panel bash commands run on the customer PC")
 
 
+_install_vision_support()
 _install()
 _install_memory()
 _install_command_gate()

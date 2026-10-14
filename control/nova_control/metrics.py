@@ -14,3 +14,5 @@ WS_SOCKETS = Gauge("nova_websocket_connections", "Open proxied WebSocket connect
 LLM_KEY_EVENTS = Counter("nova_llm_key_events_total", "LiteLLM virtual key operations", ["event"])
 TUNNELS = Gauge("nova_workspace_tunnels", "Connected customer PCs (reverse workspace tunnels)")
 LOGINS = Counter("nova_logins_total", "Desktop sign-ins", ["result"])
+OCR_EVENTS = Counter("nova_ocr_operations_total", "Agent image OCR operations", ["event"])
+OCR_LATENCY = Histogram("nova_ocr_seconds", "Agent image OCR operation latency", buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60))
