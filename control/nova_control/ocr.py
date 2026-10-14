@@ -145,13 +145,8 @@ def _content_text(data: dict) -> str:
 async def _load_image(url: str, client: httpx.AsyncClient) -> bytes:
     if url.startswith("data:"):
         return _decode_data_url(url)
-    if not url.startswith(("http://", "https://")):
-        raise ValueError("unsupported image URL")
-    response = await client.get(url, follow_redirects=True, timeout=httpx.Timeout(settings.ocr_timeout_seconds, connect=10))
-    response.raise_for_status()
-    if not response.content:
-        raise ValueError("empty image")
-    return response.content
+    # Only inline images: fetching agent-supplied http(s) URLs from inside the cluster would be an SSRF path.
+    raise ValueError("unsupported image URL")
 
 
 def _jpeg_data_url(img) -> str:
