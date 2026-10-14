@@ -38,6 +38,9 @@ class Settings:
     idle_minutes: int = field(default_factory=lambda: int(_env("NOVA_WS_IDLE_MINUTES", "30")))
     start_timeout_s: int = field(default_factory=lambda: int(_env("NOVA_WS_START_TIMEOUT", "180")))
     litellm_url: str = field(default_factory=lambda: _env("NOVA_LITELLM_URL", "http://litellm-internal.vllm.svc.cluster.local:4000"))
+    # Where agent-servers send LLM calls: our own /llmapi (image upscale + text for glm, T26), not LiteLLM directly.
+    llm_agent_base: str = field(default_factory=lambda: _env(
+        "NOVA_LLM_AGENT_BASE", f"http://nova-control.{_env('NOVA_NAMESPACE', 'nova')}.svc.cluster.local/llmapi"))
     litellm_master_key: str = field(default_factory=lambda: _env("NOVA_LITELLM_MASTER_KEY"))
     default_model: str = field(default_factory=lambda: _env("NOVA_DEFAULT_MODEL", "qwen3"))
     allowed_models: tuple = field(default_factory=lambda: tuple(m for m in _env("NOVA_ALLOWED_MODELS", "qwen3").split(",") if m))

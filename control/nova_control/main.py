@@ -57,7 +57,7 @@ _http: httpx.AsyncClient | None = None
 @app.on_event("startup")
 async def _startup():
     global _http
-    _http = httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=600, write=60, pool=10))
+    _http = httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=900, write=60, pool=10))
     start_http_server(int(os.environ.get("NOVA_METRICS_PORT", "9090")))
     asyncio.create_task(workspaces.reconcile_forever(
         lambda: {s for s, n in (_sockets + _tunnels).items() if n > 0}))

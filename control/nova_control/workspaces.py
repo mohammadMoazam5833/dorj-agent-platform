@@ -163,7 +163,7 @@ def _deployment(ident: Identity) -> client.V1Deployment:
         client.V1EnvVar(name="NOVAAGENT_TENANT", value=ident.slug),
         # the app's company-managed LLM profile names the public /llmapi; in-cluster it goes straight to LiteLLM
         client.V1EnvVar(name="NOVA_LLM_PUBLIC_BASE", value=f"{settings.public_url}/llmapi"),
-        client.V1EnvVar(name="NOVA_LLM_INTERNAL_BASE", value=settings.litellm_url),
+        client.V1EnvVar(name="NOVA_LLM_INTERNAL_BASE", value=settings.llm_agent_base),
         client.V1EnvVar(name="NOVA_REASONING_EFFORT_MAP", value=settings.reasoning_effort_map),
         client.V1EnvVar(name="NOVA_VISION_MODELS", value=settings.vision_models),
     ]
