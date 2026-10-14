@@ -8,7 +8,7 @@ import httpx
 import pytest
 from PIL import Image
 
-from nova_control import llmkeys, main, ocr
+from nova_control import llmkeys, main, ocr, tenants, workspaces
 
 
 _buffer = io.BytesIO()
@@ -193,10 +193,12 @@ class FakeHttpClient:
 async def call_llmapi(raw, headers=None):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
         return await client.post("/llmapi/v1/chat/completions", content=raw,
-                                 headers=headers or {"content-type": "application/json"})
+                                 headers=headers or {"content-type": "application/json", "authorization": "Bearer litellm-key"})
 
 
 def test_streaming_is_passed_through_after_ocr_without_buffering(monkeypatch):
+    monkeypatch.setattr(workspaces, "slug_for_llm_key", lambda key: "alice" if key == "litellm-key" else None)
+    monkeypatch.setattr(tenants, "by_name", lambda name: {"name": name, "email": "alice@isigpu.local", "token": "a" * 48, "groups": [], "disabled": False} if name == "alice" else None)
     fake = FakeHttpClient()
     monkeypatch.setattr(main, "_http", fake)
     response = asyncio.run(call_llmapi(json.dumps(body("glm")).encode()))
@@ -208,12 +210,15 @@ def test_streaming_is_passed_through_after_ocr_without_buffering(monkeypatch):
     assert sent["url"] == "http://litellm-internal.vllm.svc.cluster.local:4000/v1/chat/completions"
     sent_body = json.loads(sent["content"])
     assert "OCR TEXT" in sent_body["messages"][1]["content"]
+    assert sent_body["stream_options"]["include_usage"] is True
 
 
 def test_non_image_request_body_is_byte_identical(monkeypatch):
+    monkeypatch.setattr(workspaces, "slug_for_llm_key", lambda key: "alice" if key == "litellm-key" else None)
+    monkeypatch.setattr(tenants, "by_name", lambda name: {"name": name, "email": "alice@isigpu.local", "token": "a" * 48, "groups": [], "disabled": False} if name == "alice" else None)
     fake = FakeHttpClient()
     monkeypatch.setattr(main, "_http", fake)
-    raw = b'{"model":"glm", "messages":[], "stream":true}'
+    raw = b'{"model":"glm", "messages":[], "stream":false}'
     response = asyncio.run(call_llmapi(raw))
 
     assert b"".join(response.iter_bytes()) == b"data: one\n\ndata: two\n\n"

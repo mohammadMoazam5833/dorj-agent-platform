@@ -564,6 +564,9 @@ function loadTenants(){
       {key:"port",label:L("Port","پورت"),value:function(t){return t.port},cell:function(t){return '<span class="mut" style="direction:ltr">'+esc(t.port)+"</span>"}},
       {key:"convCount",label:L("Conversations","گفتگوها"),text:function(t){return t.convCount==null?"-":String(t.convCount)},sort:function(t){return t.convCount==null?-1:t.convCount}},
       {key:"sizeText",label:L("Size","حجم"),text:function(t){return t.sizeText},sort:function(t){return t.size||0}},
+      {key:"planTitle",label:L("Subscription","اشتراک"),value:function(t){return Array.isArray(t.planTitle)?(uiFa()?t.planTitle[0]:t.planTitle[1]):(t.planTitle||t.plan)},sort:function(t){return t.plan||""}},
+      {key:"creditToman",label:L("Credit","اعتبار"),text:function(t){return localeDigits(Number(t.creditToman||0).toLocaleString("en-US"))},sort:function(t){return Number(t.creditToman||0)}},
+      {key:"planExpires",label:L("Expires","انقضا"),text:function(t){return t.planExpires?fmtT(Date.parse(t.planExpires)):"-" },sort:function(t){return t.planExpires?Date.parse(t.planExpires):0}},
       {key:"actions",label:L("Action","عملیات"),text:function(t){return t.name},sort:function(t){return t.name},cell:function(t){
         var act=t.active==="active";
         var btns='<div class="actions">'+

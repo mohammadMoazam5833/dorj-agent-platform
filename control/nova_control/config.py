@@ -46,6 +46,12 @@ class Settings:
     allowed_models: tuple = field(default_factory=lambda: tuple(m for m in _env("NOVA_ALLOWED_MODELS", "qwen3").split(",") if m))
     monthly_budget_usd: float = field(default_factory=lambda: float(_env("NOVA_MONTHLY_BUDGET_USD", "0") or 0))
     web_root: str = field(default_factory=lambda: _env("NOVA_WEB_ROOT", "/srv/nova-web"))
+    chat_api_internal_url: str = field(default_factory=lambda: _env(
+        "CHAT_API_INTERNAL_URL", "http://chat-api-internal.dorj-site.svc.cluster.local:8010"))
+    agent_billing_secret: str = field(default_factory=lambda: _env("NOVA_BILLING_SECRET"))
+    agent_billing_enforce: bool = field(default_factory=lambda: _env("NOVA_BILLING_ENFORCE", "false").lower() == "true")
+    agent_billing_done_url: str = field(default_factory=lambda: _env(
+        "NOVA_BILLING_DONE_URL", "https://nova.isigpu.local/billing/done"))
 
 
 settings = Settings()

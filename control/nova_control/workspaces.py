@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import hmac
 import logging
 import secrets
 import time
@@ -143,6 +144,37 @@ def llm_key(ident: Identity) -> str | None:
             return None
         raise
     return base64.b64decode(s.data["llm-api-key"]).decode()
+
+
+def slug_for_llm_key(key: str) -> str | None:
+    """Resolve an agent-server LiteLLM key to its nova user without logging or storing it.
+
+    Agent-server traffic reaches /llmapi with the workspace's LiteLLM key rather than the nova
+    tenant token, so the Secret written at workspace creation is the local mapping.
+    """
+    if not key:
+        return None
+    core, _ = _apis()
+    selector = f"{LABEL_APP}=nova,app.kubernetes.io/component=workspace"
+    try:
+        secrets = core.list_namespaced_secret(settings.workspace_namespace, label_selector=selector).items
+    except ApiException:
+        return None
+    for secret in secrets:
+        raw = (secret.data or {}).get("llm-api-key")
+        if not raw:
+            continue
+        try:
+            stored = base64.b64decode(raw).decode()
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if hmac.compare_digest(stored, key):
+            slug = secret.metadata.labels.get(LABEL_USER) if secret.metadata.labels else None
+            if slug:
+                return slug
+            if secret.metadata.name.startswith("ws-"):
+                return secret.metadata.name[3:]
+    return None
 
 
 def _deployment(ident: Identity) -> client.V1Deployment:

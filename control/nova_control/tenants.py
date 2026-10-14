@@ -154,3 +154,26 @@ def gateway_view() -> dict:
     """What NovaAgent's gateway reads: active customers only, no personal data beyond the name."""
     return {"customers": [{"name": c["name"], "token": c["token"], "roots": c.get("roots", [])}
                           for c in all_customers() if not c.get("disabled")]}
+
+
+DEFAULT_PREFERENCES = {"language": "fa", "theme": "dark", "default_model": "qwen3"}
+
+
+def preferences(name: str) -> dict:
+    """Server-side, per-account preferences that follow a user to another PC."""
+    c = by_name(name) or {}
+    value = c.get("preferences") if isinstance(c.get("preferences"), dict) else {}
+    return {**DEFAULT_PREFERENCES, **value}
+
+
+def set_preferences(name: str, updates: dict) -> dict:
+    """Only validated keys reach this registry; concurrent updates use the normal retry loop."""
+    def mutate(customers):
+        for c in customers:
+            if c.get("name") == name:
+                c["preferences"] = {**DEFAULT_PREFERENCES, **(c.get("preferences") or {}), **updates}
+                return customers
+        return customers
+
+    _write(mutate)
+    return preferences(name)

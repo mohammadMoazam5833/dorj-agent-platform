@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
-from . import adminpage, auth, tenants, workspaces
+from . import adminpage, auth, billing, tenants, workspaces
 from .config import settings
 from .identity import Identity
 
@@ -182,6 +182,14 @@ def _fmt_up(s: int) -> str:
     return (f"{d} روز " if d else "") + f"{h} ساعت {m} دقیقه"
 
 
+async def _wallet(ident: Identity) -> dict:
+    try:
+        return await billing.wallet(_http, ident)
+    except HTTPException:
+        return {"plan": "unknown", "plan_title": ["نامشخص", "Unknown"], "credit_toman": 0,
+                "plan_expires": None, "models": []}
+
+
 async def _conv_list(ident: Identity, limit: int) -> list | None:
     ws = await asyncio.to_thread(workspaces.get, ident)
     if ws.state != "ready":
@@ -207,6 +215,7 @@ async def tenants_list(request: Request):
         ws = await asyncio.to_thread(workspaces.get, ident)
         convs = await _conv_list(ident, 100)
         size = sizes.get(workspaces.name_for(c["name"]))
+        w = await _wallet(ident)
         out.append({"name": c["name"], "email": c.get("email", ""), "port": "ws-" + c["name"],
                     "home": f"{settings.workspace_namespace}/{workspaces.name_for(c['name'])}",
                     "roots": c.get("roots", []), "unit": workspaces.name_for(c["name"]),
@@ -214,7 +223,9 @@ async def tenants_list(request: Request):
                     "agentOk": convs is not None, "clientConnected": gw.get(c["name"], False),
                     "convCount": len(convs) if convs is not None else None, "size": size,
                     "sizeText": _human(size), "token": (c["token"][:6] + "…") if c.get("token") else "",
-                    "hasPortalUser": True, "disabled": bool(c.get("disabled"))})
+                    "hasPortalUser": True, "disabled": bool(c.get("disabled")),
+                    "plan": w.get("plan", "unknown"), "planTitle": w.get("plan_title", ["-", "-"]),
+                    "creditToman": w.get("credit_toman", 0), "planExpires": w.get("plan_expires")})
     return {"tenants": out}
 
 

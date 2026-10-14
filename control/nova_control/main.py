@@ -20,17 +20,19 @@ import json
 import logging
 import os
 import time
+import uuid
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode
 
 import httpx
 import websockets
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from prometheus_client import start_http_server
 from starlette.background import BackgroundTask
 
-from . import __version__, admin, auth, llmkeys, ocr, tenants, workspaces
+from . import __version__, admin, auth, billing, llmkeys, ocr, tenants, workspaces
 from .config import settings
 from .auth import current_identity
 from .identity import Identity
@@ -96,6 +98,69 @@ async def readyz():
 
 
 # ── /v1 control-plane API ─────────────────────────────────────────────────────
+
+# ── desktop account, preferences and billing (before the /api workspace proxy) ──────────────────
+
+class PreferenceBody(BaseModel):
+    language: str = Field(pattern="^(fa|en)$")
+    theme: str = Field(pattern="^(dark|light)$")
+    default_model: str = Field(min_length=1, max_length=64)
+
+
+@app.get("/api/me")
+async def app_me(ident: Identity = Depends(current_identity)):
+    c = tenants.by_name(ident.slug) or {}
+    ws = await asyncio.to_thread(workspaces.get, ident)
+    wallet = await billing.wallet(_http, ident)
+    return {
+        "account": {"email": ident.email, "display_name": c.get("display_name") or ident.email,
+                    "username": ident.slug, "groups": list(ident.groups), "admin": auth.is_admin(ident),
+                    "member_since": c.get("created"), "read_only_identity": True},
+        "preferences": tenants.preferences(ident.slug),
+        "wallet": wallet,
+        "workspace": ws.as_dict(),
+    }
+
+
+@app.put("/api/me/prefs")
+async def update_prefs(body: PreferenceBody, ident: Identity = Depends(current_identity)):
+    return {"ok": True, "preferences": await asyncio.to_thread(
+        tenants.set_preferences, ident.slug, body.model_dump())}
+
+
+@app.get("/api/billing/plans")
+async def billing_plans(ident: Identity = Depends(current_identity)):
+    return await billing.plans(_http, ident)
+
+
+@app.get("/api/billing/wallet")
+async def billing_wallet(ident: Identity = Depends(current_identity)):
+    return await billing.wallet(_http, ident)
+
+
+@app.post("/api/billing/purchase")
+async def billing_purchase(request: Request, ident: Identity = Depends(current_identity)):
+    # The caller's body is not forwarded: this endpoint only takes a checked plan id, no return URL.
+    try:
+        raw = await request.json()
+    except ValueError:
+        raise HTTPException(400, "پلن انتخاب شده نامعتبر است")
+    plan_id = str(raw.get("plan_id") or "")
+    if plan_id not in {"a200", "a500", "a1200"}:
+        raise HTTPException(400, "پلن انتخاب شده نامعتبر است")
+    return await billing.purchase(_http, ident, plan_id)
+
+
+@app.get("/api/billing/history")
+async def billing_history(ident: Identity = Depends(current_identity), limit: int = 200):
+    return await billing.history(_http, ident, limit)
+
+
+@app.get("/api/me/usage")
+async def me_usage(ident: Identity = Depends(current_identity)):
+    h = await billing.history(_http, ident)
+    return {"wallet": (await billing.wallet(_http, ident)), **billing.usage_summary(h)}
+
 
 @app.get("/v1/me")
 async def me(ident: Identity = Depends(current_identity)):
@@ -230,8 +295,22 @@ async def llmapi(path: str, request: Request):
     path = path.strip("/")
     if path not in LLMAPI_PATHS:
         raise HTTPException(404)
+    ident = auth.identity_for(request)
+    if ident is None:
+        # Workspace agent-servers use the user's LiteLLM virtual key, not a nova token. Resolve it
+        # locally (never log the key) so billing stays attributable without breaking that traffic.
+        authorization = request.headers.get("authorization", "")
+        llm_key = authorization[7:] if authorization.lower().startswith("bearer ") else ""
+        slug = await asyncio.to_thread(workspaces.slug_for_llm_key, llm_key) if llm_key else None
+        customer = tenants.by_name(slug) if slug else None
+        ident = tenants.identity_of(customer) if customer else None
+    if ident is None:
+        raise HTTPException(401, "sign in with the NovaAgent app")
     headers = {k: v for k, v in request.headers.items() if k.lower() in ("authorization", "content-type", "accept")}
     content = request.stream()
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    model = settings.default_model
+    is_stream = False
     if request.method == "POST" and path in ("v1/chat/completions", "chat/completions"):
         raw = await request.body()
         try:
@@ -240,14 +319,56 @@ async def llmapi(path: str, request: Request):
             body = None
         if isinstance(body, dict):
             body, modified = await ocr.prepare_chat_completion(body, _http)
-            # Non-image requests keep the caller's exact JSON bytes; only image-bearing bodies are re-encoded.
-            content = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode() if modified else raw
+            model = body.get("model") or model
+            is_stream = bool(body.get("stream"))
+            if is_stream:
+                stream_options = body.get("stream_options")
+                body["stream_options"] = {**(stream_options if isinstance(stream_options, dict) else {}), "include_usage": True}
+                modified = True
+            # Non-image, non-stream requests keep the caller's exact JSON bytes.
+            content = (json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode()
+                       if modified else raw)
+    await billing.ensure_new_completion_allowed(_http, ident)
     upstream = await _http.send(_http.build_request(request.method, f"{settings.litellm_url}/{path}",
                                                     headers=headers, content=content,
                                                     params=request.query_params), stream=True)
     resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in HOP_BY_HOP}
+    resp_headers["X-Request-Id"] = request_id
+    if upstream.status_code == 200 and is_stream:
+        chunks: list[bytes] = []
+
+        def report() -> None:
+            usage = billing.usage_from_sse(b"".join(chunks))
+            if usage:
+                billing.enqueue_usage(ident, model, usage, request_id)
+
+        async def finish_stream() -> None:
+            await upstream.aclose()
+            report()
+
+        return StreamingResponse(billing.raw_teeing(upstream.aiter_raw(), chunks), status_code=upstream.status_code,
+                                 headers=resp_headers, background=BackgroundTask(finish_stream))
+    if upstream.status_code == 200 and request.method == "POST" and path in ("v1/chat/completions", "chat/completions"):
+        chunks = []
+
+        def report() -> None:
+            try:
+                usage = billing.usage_from_payload(json.loads(b"".join(chunks).decode("utf-8", "ignore")))
+            except json.JSONDecodeError:
+                usage = None
+            if usage:
+                billing.enqueue_usage(ident, model, usage, request_id)
+
+        async def finish_json() -> None:
+            await upstream.aclose()
+            report()
+
+        return StreamingResponse(billing.raw_teeing(upstream.aiter_raw(), chunks), status_code=upstream.status_code,
+                                 headers=resp_headers, background=BackgroundTask(finish_json))
     return StreamingResponse(upstream.aiter_raw(), status_code=upstream.status_code, headers=resp_headers,
                              background=BackgroundTask(upstream.aclose))
+
+
 
 
 # ── proxy to the caller's agent-server ───────────────────────────────────────
