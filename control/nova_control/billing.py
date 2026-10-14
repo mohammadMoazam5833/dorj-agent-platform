@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
@@ -79,13 +80,32 @@ async def history(http: httpx.AsyncClient, ident: Identity, limit: int = 200) ->
     return await _request(http, "GET", "/history", ident, params={"limit": min(max(limit, 1), 200)})
 
 
+_allowed_until: dict[str, float] = {}
+
+
+async def check_payment(http: httpx.AsyncClient, ident: Identity, payment_id: str) -> dict:
+    """The app is back from the gateway: chat-api asks the gateway itself (never trusts the client)."""
+    return await _request(http, "POST", f"/payments/{payment_id}/check", ident)
+
+
 async def ensure_new_completion_allowed(http: httpx.AsyncClient, ident: Identity) -> None:
-    """Admins are never blocked; enforcement defaults off until the owner enables it."""
+    """Admins are never blocked. An active plan is cached for 30 s (every agent step is a call); a missing plan is
+    not cached, so a purchase unblocks at once. If the billing service itself is down the call goes through
+    (logged): an outage there must not stop paying customers."""
     if not settings.agent_billing_enforce or auth.is_admin(ident):
         return
-    w = await wallet(http, ident)
+    if _allowed_until.get(ident.slug, 0) > time.monotonic():
+        return
+    try:
+        w = await wallet(http, ident)
+    except HTTPException as exc:
+        if exc.status_code in (502, 503):
+            log.warning("billing unavailable, completion allowed", extra={"event": "billing_open", "user": ident.slug})
+            return
+        raise
     if w.get("plan") in (None, "", "free") or not w.get("credit_toman"):
         raise HTTPException(402, "برای ادامه باید اشتراک دُرج ایجنت فعال باشد یا اعتبار آن را تمدید کنید")
+    _allowed_until[ident.slug] = time.monotonic() + 30
 
 
 def usage_from_payload(payload: Any) -> dict | None:

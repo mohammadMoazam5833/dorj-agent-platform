@@ -148,3 +148,32 @@ def test_llm_key_is_resolved_without_returning_or_logging_the_secret():
         assert workspaces.slug_for_llm_key("wrong") is None
     finally:
         workspaces._api_pair = original
+
+
+def test_enforcement_caches_an_active_plan_but_not_a_missing_one(monkeypatch):
+    import asyncio
+    monkeypatch.setattr(billing, "settings", SimpleNamespace(agent_billing_enforce=True))
+    monkeypatch.setattr(billing, "_allowed_until", {})
+    answers = [{"plan": "free", "credit_toman": 0}, {"plan": "a200", "credit_toman": 150000.0}]
+    calls = []
+
+    async def wallet(http, received):
+        calls.append(1)
+        return answers[min(len(calls), len(answers)) - 1]
+
+    async def unavailable(http, received):
+        raise HTTPException(503, "down")
+
+    async def run():
+        monkeypatch.setattr(billing, "wallet", wallet)
+        with pytest.raises(HTTPException) as blocked:
+            await billing.ensure_new_completion_allowed(None, ident())
+        assert blocked.value.status_code == 402
+        await billing.ensure_new_completion_allowed(None, ident())          # bought: allowed at once
+        await billing.ensure_new_completion_allowed(None, ident())          # cached, no third wallet call
+        assert len(calls) == 2
+        billing._allowed_until.clear()
+        monkeypatch.setattr(billing, "wallet", unavailable)
+        await billing.ensure_new_completion_allowed(None, ident())          # billing outage: not blocked
+
+    asyncio.run(run())

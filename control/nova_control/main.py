@@ -155,6 +155,13 @@ async def billing_purchase(request: Request, ident: Identity = Depends(current_i
     return await billing.purchase(_http, ident, plan_id)
 
 
+@app.post("/api/billing/payments/{payment_id}/check")
+async def billing_payment_check(payment_id: str, ident: Identity = Depends(current_identity)):
+    if not payment_id.isalnum() or len(payment_id) > 40:
+        raise HTTPException(404)
+    return await billing.check_payment(_http, ident, payment_id)
+
+
 @app.get("/api/billing/history")
 async def billing_history(ident: Identity = Depends(current_identity), limit: int = 200):
     return await billing.history(_http, ident, limit)
