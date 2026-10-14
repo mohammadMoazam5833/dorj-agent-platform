@@ -146,14 +146,31 @@ def llm_key(ident: Identity) -> str | None:
     return base64.b64decode(s.data["llm-api-key"]).decode()
 
 
+_key_slugs: dict[str, tuple[str | None, float]] = {}
+
+
 def slug_for_llm_key(key: str) -> str | None:
     """Resolve an agent-server LiteLLM key to its nova user without logging or storing it.
 
     Agent-server traffic reaches /llmapi with the workspace's LiteLLM key rather than the nova
-    tenant token, so the Secret written at workspace creation is the local mapping.
+    tenant token, so the Secret written at workspace creation is the local mapping. Every agent step
+    is an LLM call, so the answer is cached by the key's sha256 (5 min, misses 30 s) instead of listing
+    all workspace Secrets each time.
     """
     if not key:
         return None
+    digest = hashlib.sha256(key.encode()).hexdigest()
+    hit = _key_slugs.get(digest)
+    if hit and hit[1] > time.monotonic():
+        return hit[0]
+    slug = _slug_for_llm_key(key)
+    if len(_key_slugs) > 5000:
+        _key_slugs.clear()
+    _key_slugs[digest] = (slug, time.monotonic() + (300 if slug else 30))
+    return slug
+
+
+def _slug_for_llm_key(key: str) -> str | None:
     core, _ = _apis()
     selector = f"{LABEL_APP}=nova,app.kubernetes.io/component=workspace"
     try:

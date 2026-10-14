@@ -111,7 +111,11 @@ class PreferenceBody(BaseModel):
 async def app_me(ident: Identity = Depends(current_identity)):
     c = tenants.by_name(ident.slug) or {}
     ws = await asyncio.to_thread(workspaces.get, ident)
-    wallet = await billing.wallet(_http, ident)
+    try:
+        wallet = await billing.wallet(_http, ident)
+    except HTTPException:                       # billing down must not take the profile page with it
+        wallet = {"plan": "unknown", "plan_title": ["نامشخص", "Unknown"], "credit_toman": 0,
+                  "plan_expires": None, "models": [], "unavailable": True}
     return {
         "account": {"email": ident.email, "display_name": c.get("display_name") or ident.email,
                     "username": ident.slug, "groups": list(ident.groups), "admin": auth.is_admin(ident),
