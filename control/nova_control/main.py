@@ -122,6 +122,8 @@ async def app_me(ident: Identity = Depends(current_identity)):
                     "member_since": c.get("created"), "read_only_identity": True},
         "preferences": tenants.preferences(ident.slug),
         "wallet": wallet,
+        # the app locks the composer only when completions are really refused (402) for this user
+        "billing_enforced": settings.agent_billing_enforce and not auth.is_admin(ident),
         "workspace": ws.as_dict(),
     }
 

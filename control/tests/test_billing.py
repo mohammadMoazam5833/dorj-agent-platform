@@ -177,3 +177,27 @@ def test_enforcement_caches_an_active_plan_but_not_a_missing_one(monkeypatch):
         await billing.ensure_new_completion_allowed(None, ident())          # billing outage: not blocked
 
     asyncio.run(run())
+
+
+def test_me_tells_the_app_whether_completions_are_refused(monkeypatch):
+    """The app locks the composer only when a 402 would really come: enforce on and not an admin."""
+    import asyncio
+    from nova_control import config
+
+    async def fake_wallet(http, received):
+        return {"plan": "free", "credit_toman": 0, "plan_expires": None, "models": []}
+
+    async def run(token):
+        monkeypatch.setattr(billing, "wallet", fake_wallet)
+        monkeypatch.setattr(workspaces, "get", lambda i: SimpleNamespace(as_dict=lambda: {}))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=__import__("nova_control.main", fromlist=["app"]).app),
+                                     base_url="http://test", headers={"X-Session-API-Key": token}) as c:
+            return (await c.get("/api/me")).json()
+
+    import dataclasses
+    main = __import__("nova_control.main", fromlist=["app"])
+    monkeypatch.setattr(main, "settings", dataclasses.replace(config.settings, agent_billing_enforce=True))
+    assert asyncio.run(run("a" * 48))["billing_enforced"] is True
+    assert asyncio.run(run("b" * 48))["billing_enforced"] is False         # admins are never refused
+    monkeypatch.setattr(main, "settings", dataclasses.replace(config.settings, agent_billing_enforce=False))
+    assert asyncio.run(run("a" * 48))["billing_enforced"] is False
