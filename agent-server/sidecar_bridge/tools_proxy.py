@@ -63,6 +63,46 @@ def try_install_tool_proxies(client: SidecarClient) -> bool:
     return installed_any
 
 
+# Same set and same observation shape as the stock FileEditor.view, so a vision model sees the picture (owner
+# 2026-10-15: "view" of a JPG on the PC returned its raw bytes as text and the agent fell back to pixel statistics).
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+IMAGE_MAX_BYTES = 10 * 1024 * 1024
+
+
+def _sidecar_image_view(client: SidecarClient, mapped, path, observation_cls):  # noqa: ANN001
+    """Return an image observation for an image file on the PC, or None for anything else."""
+    import base64
+    import mimetypes
+
+    suffix = Path(str(path)).suffix.lower()
+    if suffix not in IMAGE_EXTENSIONS:
+        return None
+    from openhands.sdk import ImageContent, TextContent
+    from openhands.tools.file_editor.exceptions import ToolError
+
+    try:
+        res = client.request("read_file", {"path": str(mapped), "encoding": "base64"})
+    except SidecarClientError as exc:
+        raise ToolError(f"Failed to read image file {path}: {exc}") from None
+    b64 = str((res or {}).get("content") or "")
+    if not b64:
+        raise ToolError(f"Failed to read image file {path}: empty file")
+    if len(b64) * 3 // 4 > IMAGE_MAX_BYTES:
+        raise ToolError(f"Image file {path} is larger than {IMAGE_MAX_BYTES // (1024 * 1024)} MB; resize it first")
+    mime, _ = mimetypes.guess_type(str(path))
+    if not mime or not mime.startswith("image/"):
+        mime = "image/png"
+    return observation_cls(
+        command="view",
+        content=[
+            TextContent(text=f"Image file {path} read successfully. Displaying image content."),
+            ImageContent(image_urls=[f"data:{mime};base64,{b64}"]),
+        ],
+        path=str(path),
+        prev_exist=True,
+    )
+
+
 def _install_file_editor(client: SidecarClient) -> bool:
     try:
         from openhands.tools.file_editor.definition import FileEditorObservation
@@ -184,6 +224,9 @@ def _install_file_editor(client: SidecarClient) -> bool:
                     path=str(path),
                     prev_exist=True,
                 )
+            image = _sidecar_image_view(self._client, mapped, path, FileEditorObservation)
+            if image is not None:
+                return image
             content = self.read_file(
                 mapped,
                 start_line=view_range[0] if view_range else None,
@@ -193,6 +236,12 @@ def _install_file_editor(client: SidecarClient) -> bool:
                     else view_range[1]
                 ),
             )
+            if "\x00" in content:
+                # stock file_editor refuses binary files; sending the raw bytes as text only confuses the model
+                raise ToolError(
+                    f"Cannot view {path}: it is a binary file. Use the terminal to inspect it "
+                    "(images .png .jpg .jpeg .gif .webp .bmp can be viewed directly)."
+                )
             return FileEditorObservation.from_text(
                 text=content,
                 command="view",
