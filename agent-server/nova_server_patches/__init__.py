@@ -855,6 +855,42 @@ def _install_bash_bridge() -> None:
     logger.info("nova_server_patches: panel bash commands run on the customer PC")
 
 
+# --- Client tool schema changes (2026-10-15, owner: every new conversation failed with 422) -------------------
+# The UI registers its client tools (canvas_ui_control) when it starts a conversation. The SDK builds one global
+# Action class per tool name and answers 422 when the same name arrives with another schema, so after any UI
+# release (or an old desktop build next to the new UI) no conversation could start until the workspace restarted.
+# The first schema keeps the stock class name; a different schema gets its own class ``ClientAction_<name>_<hash>``
+# instead of an error, so old and new conversations both keep working in the same process.
+def _install_client_tool_versions() -> None:
+    import hashlib
+    import json
+
+    try:
+        from openhands.sdk.tool import client_tool as ct
+        from openhands.sdk.tool.schema import Action
+    except Exception as exc:  # pragma: no cover - SDK layout changed
+        logger.warning("nova_server_patches: client tool versions not installed (%s)", exc)
+        return
+    original = ct._get_client_action_type
+    variants: dict[tuple[str, str], type] = {}
+
+    def get_type(name, schema):  # noqa: ANN001, ANN202
+        with ct._client_action_lock:
+            first = ct._client_action_schemas.get(name)
+            if first is None or first == schema:
+                return original(name, schema)
+            digest = hashlib.sha256(json.dumps(schema, sort_keys=True).encode()).hexdigest()[:10]
+            key = (name, digest)
+            if key not in variants:
+                variants[key] = Action.from_mcp_schema(model_name=f"ClientAction_{name}_{digest}", schema=schema)
+                logger.info("client tool %s: new schema version %s registered beside the first one", name, digest)
+            return variants[key]
+
+    ct._get_client_action_type = get_type
+    logger.info("nova_server_patches: client tool schema versions allowed side by side")
+
+
+_install_client_tool_versions()
 _install_vision_support()
 _install()
 _install_memory()
